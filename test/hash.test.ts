@@ -7,3 +7,7 @@ test("同入力→同ID、異入力→異ID", () => {
 	expect(a).not.toBe(stableId("TYO", "BKK", "2026-08-03", 12345));
 	expect(a).toMatch(/^[0-9a-f]{12}$/);
 });
+
+test("区切りにより連結衝突しない", () => {
+	expect(stableId("AB", "1")).not.toBe(stableId("A", "B1"));
+});
