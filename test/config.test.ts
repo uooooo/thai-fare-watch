@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { loadConfig, maskedConfig } from "../src/config";
 
 describe("config", () => {
@@ -29,5 +32,33 @@ describe("config", () => {
 		expect(() =>
 			loadConfig({ path: "test/fixtures/bad-config.toml", env: {} }),
 		).toThrow();
+	});
+	test("既定パス未指定でcwdに設定ファイルが無ければ既定値のみになる", () => {
+		const emptyDir = mkdtempSync(join(tmpdir(), "tfw-config-"));
+		const c = loadConfig({ cwd: emptyDir, env: {} });
+		expect(c.thresholds.notify_max).toBe(15000);
+		rmSync(emptyDir, { recursive: true, force: true });
+	});
+	test("明示パスが存在しなければ例外を投げる", () => {
+		const emptyDir = mkdtempSync(join(tmpdir(), "tfw-config-"));
+		expect(() =>
+			loadConfig({ path: join(emptyDir, "nope.toml"), env: {} }),
+		).toThrow();
+		rmSync(emptyDir, { recursive: true, force: true });
+	});
+	test("未知キーを含むTOMLはzodが弾く", () => {
+		expect(() =>
+			loadConfig({ path: "test/fixtures/unknown-key.toml", env: {} }),
+		).toThrow();
+	});
+	test("thresholdsを一部だけ指定すると残りは既定値にフォールバックする", () => {
+		const c = loadConfig({
+			path: "test/fixtures/partial-thresholds.toml",
+			env: {},
+		});
+		expect(c.thresholds.notify_max).toBe(12000);
+		expect(c.thresholds.flash_max).toBe(10000);
+		expect(c.thresholds.watch_margin).toBe(1.2);
+		expect(c.windows.map((w) => w.name)).toEqual(["immediate", "near"]);
 	});
 });

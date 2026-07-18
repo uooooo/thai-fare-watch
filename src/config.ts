@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { parse } from "smol-toml";
 import { z } from "zod";
 import type { GroundLeg } from "./types";
@@ -79,6 +80,69 @@ const groundConfSchema = z.strictObject({
 	hours: z.number(),
 });
 
+const THRESHOLDS_DEFAULTS: Config["thresholds"] = {
+	notify_max: 15000,
+	flash_max: 10000,
+	watch_margin: 1.2,
+};
+
+const COMBINE_DEFAULTS: Config["combine"] = {
+	min_connect_hours: 4,
+	max_connect_hours: 26,
+	allow_next_day: true,
+	max_total_hours: 40,
+};
+
+const BROWSER_DEFAULTS: Config["browser"] = {
+	enabled: "auto",
+	min_interval_sec: 45,
+	jitter_sec: 20,
+	deep_sweep_every_hours: 3,
+	headless: true,
+	channel: "chrome",
+};
+
+const FLI_CIRCUIT_BREAKER_DEFAULTS: Config["fli"]["ci_circuit_breaker"] = {
+	consecutive_failures: 3,
+	cooldown_hours: 6,
+};
+
+const FLI_DEFAULTS: Config["fli"] = {
+	enabled: true,
+	ci_circuit_breaker: FLI_CIRCUIT_BREAKER_DEFAULTS,
+};
+
+const SERPAPI_DEFAULTS: Config["serpapi"] = {
+	monthly_quota: 250,
+	daily_budget_cap: 8,
+};
+
+const RSS_KEYWORDS_DEFAULTS: Config["rss_keywords"] = {
+	places: [
+		"タイ",
+		"バンコク",
+		"プーケット",
+		"チェンマイ",
+		"ドンムアン",
+		"スワンナプーム",
+	],
+	airlines: [
+		"エアアジア",
+		"ZIPAIR",
+		"ジップエア",
+		"スクート",
+		"ベトジェット",
+		"ピーチ",
+		"ジェットスター",
+		"タイ・ライオン・エア",
+		"AirAsia",
+		"Scoot",
+		"VietJet",
+		"Peach",
+	],
+	context: ["セール", "アジア", "国際線", "タイムセール", "片道"],
+};
+
 const configSchema = z.strictObject({
 	origins: z.array(z.string()).default(["TYO"]),
 	positioning: z.array(z.string()).default(["OSA", "NGO", "FUK", "OKA"]),
@@ -88,11 +152,11 @@ const configSchema = z.strictObject({
 	destinations: z.array(z.string()).default(["BKK", "CNX", "HKT"]),
 	thresholds: z
 		.strictObject({
-			notify_max: z.number().default(15000),
-			flash_max: z.number().default(10000),
-			watch_margin: z.number().default(1.2),
+			notify_max: z.number().default(THRESHOLDS_DEFAULTS.notify_max),
+			flash_max: z.number().default(THRESHOLDS_DEFAULTS.flash_max),
+			watch_margin: z.number().default(THRESHOLDS_DEFAULTS.watch_margin),
 		})
-		.default({ notify_max: 15000, flash_max: 10000, watch_margin: 1.2 }),
+		.default(THRESHOLDS_DEFAULTS),
 	windows: z.array(windowConfSchema).default([
 		{ name: "immediate", from: 0, to: 1, every_minutes: 30 },
 		{ name: "near", from: 2, to: 31, every_minutes: 60 },
@@ -101,54 +165,47 @@ const configSchema = z.strictObject({
 	fx_fee_rate: z.number().default(0.022),
 	combine: z
 		.strictObject({
-			min_connect_hours: z.number().default(4),
-			max_connect_hours: z.number().default(26),
-			allow_next_day: z.boolean().default(true),
-			max_total_hours: z.number().default(40),
+			min_connect_hours: z.number().default(COMBINE_DEFAULTS.min_connect_hours),
+			max_connect_hours: z.number().default(COMBINE_DEFAULTS.max_connect_hours),
+			allow_next_day: z.boolean().default(COMBINE_DEFAULTS.allow_next_day),
+			max_total_hours: z.number().default(COMBINE_DEFAULTS.max_total_hours),
 		})
-		.default({
-			min_connect_hours: 4,
-			max_connect_hours: 26,
-			allow_next_day: true,
-			max_total_hours: 40,
-		}),
+		.default(COMBINE_DEFAULTS),
 	browser: z
 		.strictObject({
-			enabled: z.union([z.literal("auto"), z.boolean()]).default("auto"),
-			min_interval_sec: z.number().default(45),
-			jitter_sec: z.number().default(20),
-			deep_sweep_every_hours: z.number().default(3),
-			headless: z.boolean().default(true),
-			channel: z.string().default("chrome"),
+			enabled: z
+				.union([z.literal("auto"), z.boolean()])
+				.default(BROWSER_DEFAULTS.enabled),
+			min_interval_sec: z.number().default(BROWSER_DEFAULTS.min_interval_sec),
+			jitter_sec: z.number().default(BROWSER_DEFAULTS.jitter_sec),
+			deep_sweep_every_hours: z
+				.number()
+				.default(BROWSER_DEFAULTS.deep_sweep_every_hours),
+			headless: z.boolean().default(BROWSER_DEFAULTS.headless),
+			channel: z.string().default(BROWSER_DEFAULTS.channel),
 		})
-		.default({
-			enabled: "auto",
-			min_interval_sec: 45,
-			jitter_sec: 20,
-			deep_sweep_every_hours: 3,
-			headless: true,
-			channel: "chrome",
-		}),
+		.default(BROWSER_DEFAULTS),
 	fli: z
 		.strictObject({
-			enabled: z.boolean().default(true),
+			enabled: z.boolean().default(FLI_DEFAULTS.enabled),
 			ci_circuit_breaker: z
 				.strictObject({
-					consecutive_failures: z.number().default(3),
-					cooldown_hours: z.number().default(6),
+					consecutive_failures: z
+						.number()
+						.default(FLI_CIRCUIT_BREAKER_DEFAULTS.consecutive_failures),
+					cooldown_hours: z
+						.number()
+						.default(FLI_CIRCUIT_BREAKER_DEFAULTS.cooldown_hours),
 				})
-				.default({ consecutive_failures: 3, cooldown_hours: 6 }),
+				.default(FLI_CIRCUIT_BREAKER_DEFAULTS),
 		})
-		.default({
-			enabled: true,
-			ci_circuit_breaker: { consecutive_failures: 3, cooldown_hours: 6 },
-		}),
+		.default(FLI_DEFAULTS),
 	serpapi: z
 		.strictObject({
-			monthly_quota: z.number().default(250),
-			daily_budget_cap: z.number().default(8),
+			monthly_quota: z.number().default(SERPAPI_DEFAULTS.monthly_quota),
+			daily_budget_cap: z.number().default(SERPAPI_DEFAULTS.daily_budget_cap),
 		})
-		.default({ monthly_quota: 250, daily_budget_cap: 8 }),
+		.default(SERPAPI_DEFAULTS),
 	rss_feeds: z.array(feedConfSchema).default([
 		{
 			name: "traicy-sale",
@@ -163,61 +220,11 @@ const configSchema = z.strictObject({
 	]),
 	rss_keywords: z
 		.strictObject({
-			places: z
-				.array(z.string())
-				.default([
-					"タイ",
-					"バンコク",
-					"プーケット",
-					"チェンマイ",
-					"ドンムアン",
-					"スワンナプーム",
-				]),
-			airlines: z
-				.array(z.string())
-				.default([
-					"エアアジア",
-					"ZIPAIR",
-					"ジップエア",
-					"スクート",
-					"ベトジェット",
-					"ピーチ",
-					"ジェットスター",
-					"タイ・ライオン・エア",
-					"AirAsia",
-					"Scoot",
-					"VietJet",
-					"Peach",
-				]),
-			context: z
-				.array(z.string())
-				.default(["セール", "アジア", "国際線", "タイムセール", "片道"]),
+			places: z.array(z.string()).default(RSS_KEYWORDS_DEFAULTS.places),
+			airlines: z.array(z.string()).default(RSS_KEYWORDS_DEFAULTS.airlines),
+			context: z.array(z.string()).default(RSS_KEYWORDS_DEFAULTS.context),
 		})
-		.default({
-			places: [
-				"タイ",
-				"バンコク",
-				"プーケット",
-				"チェンマイ",
-				"ドンムアン",
-				"スワンナプーム",
-			],
-			airlines: [
-				"エアアジア",
-				"ZIPAIR",
-				"ジップエア",
-				"スクート",
-				"ベトジェット",
-				"ピーチ",
-				"ジェットスター",
-				"タイ・ライオン・エア",
-				"AirAsia",
-				"Scoot",
-				"VietJet",
-				"Peach",
-			],
-			context: ["セール", "アジア", "国際線", "タイムセール", "片道"],
-		}),
+		.default(RSS_KEYWORDS_DEFAULTS),
 	ground: z.array(groundConfSchema).default([
 		{ to: "NRT", mode: "bus", priceJpy: 1500, hours: 1.5 },
 		{ to: "HND", mode: "train", priceJpy: 600, hours: 0.5 },
@@ -250,9 +257,11 @@ function readRawToml(path: string, explicitPath: boolean): unknown {
 
 export function loadConfig(opts?: {
 	path?: string;
+	cwd?: string;
 	env?: Record<string, string | undefined>;
 }): Config {
-	const path = opts?.path ?? DEFAULT_CONFIG_PATH;
+	const cwd = opts?.cwd ?? process.cwd();
+	const path = opts?.path ?? join(cwd, DEFAULT_CONFIG_PATH);
 	const raw = readRawToml(path, opts?.path !== undefined);
 	const env = opts?.env ?? process.env;
 	const rawWithSecrets = {
@@ -268,12 +277,11 @@ export function loadConfig(opts?: {
 
 export function maskedConfig(c: Config): unknown {
 	const mask = (v: string | undefined) => (v === undefined ? undefined : "***");
-	return {
-		...c,
-		secrets: {
-			discordWebhookUrl: mask(c.secrets.discordWebhookUrl),
-			travelpayoutsToken: mask(c.secrets.travelpayoutsToken),
-			serpapiKey: mask(c.secrets.serpapiKey),
-		},
+	const clone = structuredClone(c);
+	clone.secrets = {
+		discordWebhookUrl: mask(c.secrets.discordWebhookUrl),
+		travelpayoutsToken: mask(c.secrets.travelpayoutsToken),
+		serpapiKey: mask(c.secrets.serpapiKey),
 	};
+	return clone;
 }
