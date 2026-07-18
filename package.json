@@ -1,0 +1,25 @@
+{
+	"name": "thai-fare-watch",
+	"type": "module",
+	"bin": {
+		"tfw": "./src/cli.ts"
+	},
+	"scripts": {
+		"tfw": "bun run src/cli.ts",
+		"test": "bun test",
+		"check": "biome check ."
+	},
+	"private": true,
+	"devDependencies": {
+		"@biomejs/biome": "^2.5.4",
+		"@types/bun": "latest",
+		"bun-types": "^1.3.14",
+		"typescript": "^7.0.2"
+	},
+	"dependencies": {
+		"citty": "^0.2.2",
+		"fast-xml-parser": "^5.10.1",
+		"smol-toml": "^1.7.0",
+		"zod": "^4.4.3"
+	}
+}
