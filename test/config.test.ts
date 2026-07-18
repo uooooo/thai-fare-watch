@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig, maskedConfig } from "../src/config";
@@ -38,6 +38,17 @@ describe("config", () => {
 		const c = loadConfig({ cwd: emptyDir, env: {} });
 		expect(c.thresholds.notify_max).toBe(15000);
 		rmSync(emptyDir, { recursive: true, force: true });
+	});
+	test("cwdのtfw.config.tomlが実際に読まれる（既定値と異なる値で検証）", () => {
+		const dir = mkdtempSync(join(tmpdir(), "tfw-config-"));
+		writeFileSync(
+			join(dir, "tfw.config.toml"),
+			"[thresholds]\nnotify_max = 99999\n",
+		);
+		const c = loadConfig({ cwd: dir, env: {} });
+		expect(c.thresholds.notify_max).toBe(99999);
+		expect(c.thresholds.flash_max).toBe(10000);
+		rmSync(dir, { recursive: true, force: true });
 	});
 	test("明示パスが存在しなければ例外を投げる", () => {
 		const emptyDir = mkdtempSync(join(tmpdir(), "tfw-config-"));
