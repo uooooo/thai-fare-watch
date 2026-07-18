@@ -1,0 +1,87 @@
+origins = ["TYO"]
+positioning = ["OSA", "NGO", "FUK", "OKA"]
+hubs = ["SEL", "TPE", "KUL", "SGN", "SIN", "HKG", "MNL"]
+destinations = ["BKK", "CNX", "HKT"]
+trusted_otas = ["trip.com", "booking.com"]
+fx_fee_rate = 0.022
+
+[thresholds]
+notify_max = 15000
+flash_max = 10000
+watch_margin = 1.2
+
+[[windows]]
+name = "immediate"
+from = 0
+to = 1
+every_minutes = 30
+
+[[windows]]
+name = "near"
+from = 2
+to = 31
+every_minutes = 60
+
+[combine]
+min_connect_hours = 4
+max_connect_hours = 26
+allow_next_day = true
+max_total_hours = 40
+
+[browser]
+enabled = "auto"
+min_interval_sec = 45
+jitter_sec = 20
+deep_sweep_every_hours = 3
+headless = true
+channel = "chrome"
+
+[fli]
+enabled = true
+[fli.ci_circuit_breaker]
+consecutive_failures = 3
+cooldown_hours = 6
+
+[serpapi]
+monthly_quota = 250
+daily_budget_cap = 8
+
+[[rss_feeds]]
+name = "traicy-sale"
+url = "https://www.traicy.com/category/airline/sale/feed"
+every_minutes = 60
+
+[[rss_feeds]]
+name = "sky-budget"
+url = "https://sky-budget.com/feed/"
+every_minutes = 120
+
+[rss_keywords]
+places = ["タイ", "バンコク", "プーケット", "チェンマイ", "ドンムアン", "スワンナプーム"]
+airlines = ["エアアジア", "ZIPAIR", "ジップエア", "スクート", "ベトジェット", "ピーチ", "ジェットスター", "タイ・ライオン・エア", "AirAsia", "Scoot", "VietJet", "Peach"]
+context = ["セール", "アジア", "国際線", "タイムセール", "片道"]
+
+# 東京都心→空港の地上アクセス（最安目安。新幹線でKIXは¥14,500だが夜行バス既定）
+[[ground]]
+to = "NRT"
+mode = "bus"
+priceJpy = 1500
+hours = 1.5
+
+[[ground]]
+to = "HND"
+mode = "train"
+priceJpy = 600
+hours = 0.5
+
+[[ground]]
+to = "OSA"
+mode = "bus"
+priceJpy = 6000
+hours = 9.0
+
+[[ground]]
+to = "NGO"
+mode = "bus"
+priceJpy = 4000
+hours = 6.0
