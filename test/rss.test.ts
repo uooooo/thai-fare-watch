@@ -22,6 +22,34 @@ describe("matchSaleNews", () => {
 			),
 		).toEqual([]);
 	});
+	test("「タイムセール」単体は「タイ」に誤マッチしない", () => {
+		expect(
+			matchSaleNews("国内線タイムセール開催のお知らせ", cfg.rss_keywords),
+		).toEqual([]);
+		expect(
+			matchSaleNews("春の国内線タイムセール開催", cfg.rss_keywords),
+		).toEqual([]);
+		expect(
+			matchSaleNews("タイミングを合わせて予約しよう", cfg.rss_keywords),
+		).toEqual([]);
+	});
+	test("「タイ」は境界があれば地名としてマッチする", () => {
+		expect(
+			matchSaleNews("エアアジア、タイ行きセール", cfg.rss_keywords),
+		).toContain("タイ");
+		expect(matchSaleNews("日本=タイ線が値下げ", cfg.rss_keywords)).toContain(
+			"タイ",
+		);
+		expect(matchSaleNews("タイ・バンコク特集", cfg.rss_keywords)).toContain(
+			"タイ",
+		);
+		expect(matchSaleNews("成田からタイへ", cfg.rss_keywords)).toContain("タイ");
+	});
+	test("長いカタカナ語は従来どおり部分一致（バンコクツアー等）", () => {
+		expect(matchSaleNews("バンコクツアーが安い", cfg.rss_keywords)).toContain(
+			"バンコク",
+		);
+	});
 });
 
 describe("RssSignal.poll", () => {
