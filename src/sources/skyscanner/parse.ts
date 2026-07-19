@@ -104,15 +104,30 @@ export function parseSkyscannerCards(rows: SkyscannerCardRaw[]): ParsedCard[] {
 }
 
 // バッジのDOM生テキストに「おすすめ/Recommended/信頼できる」を含むかどうかの判定。
-// 完全一致ではなく部分一致(正規表現)でよい —これはtrust.tsの販売元名なりすまし対策
-// (完全一致のみ)とは別の関心事: ここで決めるのはあくまで「Skyscannerが画面上にどういう
-// 文言のバッジを出したか」というプレゼンテーション層の解釈であり、判定結果は単なる
-// booleanとしてtrust.ts(classifySeller)へ渡るだけなので、trust.ts側の完全一致不変条件
-// を弱めない。
 const RECOMMENDED_BADGE_RE = /recommended|おすすめ|信頼できる/i;
 
-function hasRecommendedBadge(badgeText: string | undefined): boolean {
-	return badgeText !== undefined && RECOMMENDED_BADGE_RE.test(badgeText);
+// 汚染判定用の軽い正規化。trust.tsのnormalizeSeller(英数字以外を全除去 —CJKが空になる)
+// とは別物で、ここではCJKを保持したまま比較する必要があるため NFKC→小文字→空白除去 のみ。
+function lightNorm(s: string): string {
+	return s.normalize("NFKC").toLowerCase().replace(/\s+/g, "");
+}
+
+// なりすまし対策(defense in depth): バッジは本来「隔離されたバッジ要素」からのみ取得すべき
+// だが(index.ts側で対応)、万一 badgeText が行テキスト全体で汚染され販売元名そのものを
+// 含んでいた場合、代理店が自らを「おすすめ格安トラベル」等と名乗るだけで信頼扱いに昇格
+// できてしまう。そこで純粋層でも「バッジ文字列が販売元名を内包していたら汚染とみなしバッジ
+// 無効」とする。CJK名も弾けるよう、英数字除去しないlightNormで包含判定する。
+function hasRecommendedBadge(
+	badgeText: string | undefined,
+	seller: string,
+): boolean {
+	if (badgeText === undefined || !RECOMMENDED_BADGE_RE.test(badgeText)) {
+		return false;
+	}
+	const b = lightNorm(badgeText);
+	const s = lightNorm(seller);
+	if (s !== "" && b.includes(s)) return false;
+	return true;
 }
 
 // agency一覧(予約オプション)の行群 → {seller, priceJpy, recommendedBadge}[]。
@@ -126,7 +141,7 @@ export function parseAgencyRows(rows: AgencyRowRaw[]): ParsedAgencyRow[] {
 		out.push({
 			seller,
 			priceJpy,
-			recommendedBadge: hasRecommendedBadge(row.badgeText),
+			recommendedBadge: hasRecommendedBadge(row.badgeText, seller),
 		});
 	}
 	return out;

@@ -52,7 +52,8 @@ headless = false
 user_data_dir = ""
 market = "jp"
 cooldown_hours = 6
-trust_recommended_badge = true
+# バッジによる信頼付与は既定で無効。実DOMで隔離バッジ要素セレクタを検証するまでtrueにしない。
+trust_recommended_badge = false
 
 [serpapi]
 monthly_quota = 250

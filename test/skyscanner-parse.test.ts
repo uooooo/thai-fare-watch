@@ -158,3 +158,53 @@ describe("parseAgencyRows (CONSTRUCTED fixture: agency-rows.json、Recommended P
 		]);
 	});
 });
+
+// なりすまし対策(レビュー指摘のCritical): バッジテキストが行テキスト全体で汚染され
+// 販売元名そのものを含む場合、代理店が自らを「おすすめ〜」等と名乗るだけで信頼扱いに
+// 昇格できてしまう。parse層の汚染ガードでこれを遮断する。
+describe("parseAgencyRows なりすまし対策(バッジ文字列が販売元名を内包→無効)", () => {
+	test("CJK名に推奨語を含めても、バッジが名前を内包していればrecommendedBadge=false", () => {
+		const got = parseAgencyRows([
+			{
+				agency: "おすすめ激安トラベル",
+				priceText: "¥8,500",
+				badgeText: "おすすめ激安トラベル ¥8,500",
+			},
+		]);
+		expect(got[0]?.recommendedBadge).toBe(false);
+	});
+	test("英語名に Recommended を含めても、バッジが名前を内包していればfalse", () => {
+		const got = parseAgencyRows([
+			{
+				agency: "Recommended Travel Deals",
+				priceText: "¥7,900",
+				badgeText: "Recommended Travel Deals ¥7,900",
+			},
+		]);
+		expect(got[0]?.recommendedBadge).toBe(false);
+	});
+	test("「信頼できる」を名乗る代理店も、バッジが名前を内包していればfalse", () => {
+		const got = parseAgencyRows([
+			{
+				agency: "信頼できる格安ツアー",
+				priceText: "¥9,100",
+				badgeText: "信頼できる格安ツアー ¥9,100",
+			},
+		]);
+		expect(got[0]?.recommendedBadge).toBe(false);
+	});
+	test("販売元名を含まない独立したバッジ文言なら、非allowlist代理店でもtrueになる", () => {
+		const got = parseAgencyRows([
+			{
+				agency: "GoodAgency",
+				priceText: "¥8,000",
+				badgeText: "おすすめの提供会社",
+			},
+		]);
+		expect(got[0]).toEqual({
+			seller: "GoodAgency",
+			priceJpy: 8000,
+			recommendedBadge: true,
+		});
+	});
+});

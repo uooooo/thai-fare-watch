@@ -31,7 +31,9 @@
 
 ## 3. データソース事情（2026-07-18 調査結果の要約）
 
-前提となる市場変化: **Amadeus Self-Service API は 2026-07-17 に完全廃止**。Kiwi Tequila API は新規受付終了（公式MCP `mcp.kiwi.com` が個人向け唯一の窓口だが、キュレーション済み出力・販売元が常にKiwi.comのため監視主軸に不適）。Skyscanner は公式API/MCPともB2B審査制のみ、RapidAPI系2次ラッパーは無料枠月20回に縮小。**SkyscannerはPerimeterX系の多層bot対策（TLS指紋・行動解析）によりブラウザ自動化でも安定運用不可**のため恒久非対応とし、信頼バッジの考え方（Recommended Provider基準）はallowlist初期値に反映するのみ。
+前提となる市場変化: **Amadeus Self-Service API は 2026-07-17 に完全廃止**。Kiwi Tequila API は新規受付終了（公式MCP `mcp.kiwi.com` が個人向け唯一の窓口だが、キュレーション済み出力・販売元が常にKiwi.comのため監視主軸に不適）。Skyscanner は公式API/MCPともB2B審査制のみ、RapidAPI系2次ラッパーは無料枠月20回に縮小。**SkyscannerはPerimeterX系の多層bot対策（TLS指紋・行動解析）によりブラウザ自動化でも安定運用は困難**。
+
+Skyscannerの扱い（ユーザー指示 v3.1 で更新 — 従来「恒久非対応」としていたが、ローカルの実Chrome+住宅IPという条件下では取得の余地があるとの判断で「ローカル専用・ベストエフォート」ソースとして正式採用、Task 15b）: **CI（データセンターIP）では無効**、ローカルでは実Chromeの永続プロファイル（warmup前提）+ 非ヘッドレスで低頻度に試行し、PerimeterX/CAPTCHA検知時はクールダウンして自動後退する（他ソースが肩代わり）。実際、実装時のライブ採取では px-captcha ブロックを実測しており、恒常的な取得は保証しない。固有価値は Skyscanner の Recommended Provider バッジで、これを信頼フィルタ（`classifySeller` の `recommendedBadge`）に加算する。
 
 **Google Flightsはブラウザ自動化に寛容**（住宅IPからの低頻度アクセスなら実質素通り、fast-flights/fli等の非ブラウザ直叩きOSSが成立している程度の防御）で、かつ**予約オプションパネルに販売元一覧（航空会社直販/Trip.com/Booking.com等）が表示される**ため、価格取得と信頼フィルタの両方をブラウザで完結できる。これを主軸に据える。
 
@@ -48,7 +50,7 @@
 ## 4. アプローチ選定（決定済み）
 
 - **採用: ブラウザ主軸ハイブリッド** — ローカルMacのPlaywright（Google Flights）が深掃引と販売元検証を無料で担い、Macスリープ中はGitHub Actions上のAPIソース（fli/Travelpayouts/RSS）が面を張る。状態はgitで同期し、どちらのランナーも同じ`data/`にコミットする。
-- 不採用: API二段構え型（SerpAPIクォータ依存・登録必須）→ フォールバックに降格。スクレイピング全振り型（販売元不明）、Workers常駐型（CLI分裂）、Skyscannerライブ取得（bot対策いたちごっこ）。
+- 不採用: API二段構え型（SerpAPIクォータ依存・登録必須）→ フォールバックに降格。スクレイピング全振り型（販売元不明）、Workers常駐型（CLI分裂）。Skyscannerライブ取得はローカル専用・ベストエフォートとして限定採用（Task 15b、上記§3参照）。
 
 言語・ランタイム: **TypeScript / bun**。ブラウザ自動化は **Playwright**（`channel: "chrome"` で実Chrome使用、指紋を自然に保つ）。fliはJS版（`fli-js`）を第一候補、品質不足ならPython版CLIを `uvx` サブプロセスで叩く（アダプタ内に隠蔽、実装時に判定）。
 

@@ -439,7 +439,10 @@ const BLOCK_TEXT_PATTERNS: RegExp[] = [
 // このリポジトリのtsconfigはDOM libを含めない。evaluate()に渡す関数本体は
 // Playwrightにソース文字列としてシリアライズされブラウザ側の実document上で実行される
 // (gf-browserと同じ制約)。実際に使う分だけのMinimal構造型を自前定義してanyを避ける。
-type MinimalElement = { innerText?: string };
+type MinimalElement = {
+	innerText?: string;
+	querySelector(selector: string): MinimalElement | null;
+};
 type MinimalDocument = {
 	querySelectorAll(selector: string): Iterable<MinimalElement>;
 };
@@ -559,24 +562,37 @@ function wrapPage(pwPage: PwPage): Page {
 				const doc = (globalThis as unknown as { document: MinimalDocument })
 					.document;
 				const priceRe = /[¥￥]\s*[\d,]+|[\d,]+\s*円/;
-				const badgeRe = /recommended|おすすめ|信頼できる/i;
 				const out: { agency: string; priceText: string; badgeText?: string }[] =
 					[];
 				const candidates = Array.from(
 					doc.querySelectorAll('[data-testid*="provider"], li, tr'),
 				);
+				// なりすまし対策: バッジは行テキスト全体からではなく、バッジ専用の隔離要素
+				// からのみ読む。行テキストにバッジ文言(おすすめ等)が紛れていても、それが
+				// 販売元名の一部なら信頼バッジとして扱わない。名前も同様にバッジ要素の
+				// テキストを除去してから確定する。
+				const BADGE_SEL =
+					'[class*="badge" i],[class*="recommend" i],[data-testid*="recommend" i],[aria-label*="recommend" i],[aria-label*="おすすめ" i]';
+				const NAME_SEL =
+					'[data-testid*="provider-name" i],[class*="provider-name" i],[class*="agent" i]';
 				for (const el of candidates) {
 					const text = el.innerText?.trim() ?? "";
 					if (!text || text.length > 200) continue;
 					const priceMatch = text.match(priceRe);
 					if (!priceMatch) continue;
-					const agency = text.replace(priceMatch[0], "").trim();
+					// バッジは隔離要素のテキストのみ(存在しなければundefined)。
+					const badgeEl = el.querySelector(BADGE_SEL);
+					const badgeText = badgeEl?.innerText?.trim() || undefined;
+					// 名前は専用要素があればそれを使い、無ければ行テキストから価格とバッジ
+					// テキストを除去して求める(バッジ文言が名前に残らないようにする)。
+					const nameEl = el.querySelector(NAME_SEL);
+					let agency = nameEl?.innerText?.trim() ?? "";
+					if (!agency) {
+						agency = text.replace(priceMatch[0], "").trim();
+						if (badgeText) agency = agency.replace(badgeText, "").trim();
+					}
 					if (!agency) continue;
-					out.push({
-						agency,
-						priceText: priceMatch[0],
-						badgeText: badgeRe.test(text) ? text : undefined,
-					});
+					out.push({ agency, priceText: priceMatch[0], badgeText });
 				}
 				return out;
 			});

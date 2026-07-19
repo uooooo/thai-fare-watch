@@ -73,7 +73,8 @@ describe("config", () => {
 			user_data_dir: "",
 			market: "jp",
 			cooldown_hours: 6,
-			trust_recommended_badge: true,
+			// 既定false: 実DOMで隔離バッジ要素を検証するまでバッジ信頼付与は無効。
+			trust_recommended_badge: false,
 		});
 		expect(c.skyscanner.headless).not.toBe(c.browser.headless);
 	});

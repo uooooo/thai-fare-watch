@@ -163,6 +163,12 @@ export async function verifyItinerary(
 		stage1Ran = true;
 	}
 
+	// 注意: ここに "skyscanner" を追加してはいけない。Skyscannerソースはバッジ由来の
+	// trust("trusted_ota")を付けたSellerOfferを返すが、下流のsellerStageはapplyTrustで
+	// 各sellerを再分類する。SellerOffer型にはrecommendedBadgeフィールドが無いため、
+	// 再分類でバッジ由来の信頼が黙ってreference(=通知対象外)に降格する。skyscannerを
+	// このseller検証連鎖へ組み込む場合は、先にSellerOfferへbadgeフィールドを追加し
+	// applyTrustがそれを尊重するようにすること。
 	const sellerSource =
 		sources.find(
 			(s) => s.name === "gf-browser" && s.verify && s.available(env),

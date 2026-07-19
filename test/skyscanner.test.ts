@@ -317,7 +317,16 @@ describe("SkyscannerBrowserSource.verify", () => {
 			agencyRows,
 		});
 		const { launchPersistent } = fakeLaunch([page], calls);
-		const src = new SkyscannerBrowserSource(cfg, { launchPersistent, now });
+		// バッジ→trusted_otaの配線を検証するテストなので、フラグを明示的にONにする
+		// (本番既定はfalse: 実DOMで隔離バッジ要素を検証するまで無効)。
+		const badgeOnCfg = {
+			...cfg,
+			skyscanner: { ...cfg.skyscanner, trust_recommended_badge: true },
+		};
+		const src = new SkyscannerBrowserSource(badgeOnCfg, {
+			launchPersistent,
+			now,
+		});
 
 		const got = await src.verify(nrtBkk, "2026-08-18");
 

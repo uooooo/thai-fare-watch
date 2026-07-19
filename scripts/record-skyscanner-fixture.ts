@@ -35,7 +35,10 @@ const NAV_TIMEOUT_MS = 20_000;
 // ブラウザ側の実document上で実行される。このリポジトリのtsconfigはDOM libを含めない
 // ため、document等のDOM globalの型名は直接参照できない。実際に使う分だけの
 // Minimal構造型を自前定義してanyを避ける(record-gf-fixture.tsと同じ規約)。
-type MinimalElement = { innerText?: string };
+type MinimalElement = {
+	innerText?: string;
+	querySelector(selector: string): MinimalElement | null;
+};
 type MinimalDocument = {
 	querySelectorAll(selector: string): Iterable<MinimalElement>;
 };
@@ -224,7 +227,6 @@ async function main(): Promise<void> {
 					const doc = (globalThis as unknown as { document: MinimalDocument })
 						.document;
 					const priceRe = /[¥￥]\s*[\d,]+|[\d,]+\s*円/;
-					const badgeRe = /recommended|おすすめ|信頼できる/i;
 					const out: {
 						agency: string;
 						priceText: string;
@@ -233,17 +235,29 @@ async function main(): Promise<void> {
 					const candidates = Array.from(
 						doc.querySelectorAll('[data-testid*="provider"], li, tr'),
 					);
+					// なりすまし対策: バッジは行テキスト全体でなくバッジ専用要素からのみ読む
+					// (index.tsのcollectAgencyRowsと同じ方針)。
+					const BADGE_SEL =
+						'[class*="badge" i],[class*="recommend" i],[data-testid*="recommend" i],[aria-label*="recommend" i],[aria-label*="おすすめ" i]';
+					const NAME_SEL =
+						'[data-testid*="provider-name" i],[class*="provider-name" i],[class*="agent" i]';
 					for (const el of candidates) {
 						const text = el.innerText?.trim() ?? "";
 						if (!text || text.length > 200) continue;
 						const priceMatch = text.match(priceRe);
 						if (!priceMatch) continue;
-						const agency = text.replace(priceMatch[0], "").trim();
+						const badgeText =
+							el.querySelector(BADGE_SEL)?.innerText?.trim() || undefined;
+						let agency = el.querySelector(NAME_SEL)?.innerText?.trim() ?? "";
+						if (!agency) {
+							agency = text.replace(priceMatch[0], "").trim();
+							if (badgeText) agency = agency.replace(badgeText, "").trim();
+						}
 						if (!agency) continue;
 						out.push({
 							agency,
 							priceText: priceMatch[0],
-							badgeText: badgeRe.test(text) ? text : undefined,
+							badgeText,
 						});
 					}
 					return out;

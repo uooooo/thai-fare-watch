@@ -133,7 +133,10 @@ const SKYSCANNER_DEFAULTS: Config["skyscanner"] = {
 	user_data_dir: "",
 	market: "jp",
 	cooldown_hours: 6,
-	trust_recommended_badge: true,
+	// バッジによる信頼付与は既定で無効。実DOMで「隔離されたバッジ要素」のセレクタを
+	// 検証できるまでtrueにしない(現状Skyscannerはbot対策でブロックされ実採取できていない)。
+	// 将来warmupプロファイルで実採取・検証してからtrueに切り替える。
+	trust_recommended_badge: false,
 };
 
 const SERPAPI_DEFAULTS: Config["serpapi"] = {
