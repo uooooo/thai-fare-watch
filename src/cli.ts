@@ -7,6 +7,7 @@ import type { ArgsDef, CommandDef } from "citty";
 import { defineCommand, renderUsage, runMain } from "citty";
 import { type Config, loadConfig, maskedConfig } from "./config";
 import { buildPairs, marketOf, runWatchOnce } from "./core/pipeline";
+import { applyTrust } from "./core/trust";
 import { DiscordNotifier } from "./notify/discord";
 import { RssSignal } from "./signals/rss";
 import { buildSources } from "./sources/index";
@@ -319,7 +320,14 @@ const verifyCmd = defineCommand({
 					// 失敗させない)。fli自体の失敗(上のfli?.verify呼び出し)はコマンドの主目的が
 					// 果たせないため致命的だが、--sellersはあくまで付加情報という位置づけ。
 					try {
-						offers.push(...(await sellerSource.verify(od, date)));
+						// 販売元ソースはtrust:"reference"のプレースホルダで返すため、ここで
+						// applyTrustを通して本来の信頼分類(航空会社直販/信頼OTA/参考)を確定
+						// させてから出力する。これを通さないと、agentが`verify --sellers`で
+						// 見る出力が全てreferenceになり誤解を招く(pipeline側はverifyItineraryで
+						// 同じapplyTrustを通している)。ソースから取得直後のofferにのみ適用する
+						// のでratchetの心配はない。
+						const raw = await sellerSource.verify(od, date);
+						offers.push(...raw.map((o) => applyTrust(o, cfg.trusted_otas)));
 					} catch (err) {
 						process.stderr.write(
 							`verify: ${sellerSource.name}: ${errMsg(err)}\n`,
