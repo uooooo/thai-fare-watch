@@ -1,0 +1,47 @@
+name: pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+  workflow_dispatch:
+
+permissions:
+  pages: write
+  id-token: write
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: github-pages
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: build
+        run: |
+          if [ -d web ]; then
+            (cd web && bun install && bun run build)
+          else
+            echo "no web/ yet"
+          fi
+      # web/ 未実装の間もワークフロー自体は失敗させない（dist有無で後続をガード）
+      - name: check dist
+        id: check
+        run: |
+          if [ -d web/dist ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.check.outputs.exists == 'true'
+        with:
+          path: web/dist
+      - uses: actions/deploy-pages@v4
+        if: steps.check.outputs.exists == 'true'

@@ -1,0 +1,179 @@
+{
+	"success": true,
+	"data_source": "google_flights",
+	"search_type": "flights",
+	"trip_type": "ONE_WAY",
+	"query": {
+		"origin": "NRT",
+		"destination": "BKK",
+		"departure_date": "2026-08-18",
+		"return_date": null,
+		"departure_window": null,
+		"airlines": null,
+		"cabin_class": "ECONOMY",
+		"max_stops": "ANY",
+		"sort_by": "CHEAPEST",
+		"exclude_airlines": null,
+		"alliances": null,
+		"exclude_alliances": null
+	},
+	"count": 3,
+	"flights": [
+		{
+			"duration": 400,
+			"stops": 0,
+			"legs": [
+				{
+					"departure_airport": {
+						"code": "NRT",
+						"name": "Narita International Airport"
+					},
+					"arrival_airport": {
+						"code": "BKK",
+						"name": "Suvarnabhumi Airport"
+					},
+					"departure_time": "2026-08-18T17:00:00",
+					"arrival_time": "2026-08-18T21:40:00",
+					"duration": 400,
+					"airline": {
+						"code": "ZG",
+						"name": "Zipair"
+					},
+					"flight_number": "51",
+					"aircraft": "Boeing 787",
+					"legroom": "31 inches",
+					"amenities": {
+						"wifi": true,
+						"legroom_rating": 2
+					}
+				}
+			],
+			"price": 36072.0,
+			"currency": "JPY",
+			"self_transfer": false,
+			"mixed_cabin": false
+		},
+		{
+			"duration": 1820,
+			"stops": 1,
+			"legs": [
+				{
+					"departure_airport": {
+						"code": "NRT",
+						"name": "Narita International Airport"
+					},
+					"arrival_airport": {
+						"code": "ICN",
+						"name": "Incheon International Airport"
+					},
+					"departure_time": "2026-08-18T19:50:00",
+					"arrival_time": "2026-08-18T22:45:00",
+					"duration": 175,
+					"airline": {
+						"code": "7C",
+						"name": "Jeju Air"
+					},
+					"flight_number": "1110",
+					"aircraft": "Boeing 737",
+					"legroom": "29 inches"
+				},
+				{
+					"departure_airport": {
+						"code": "ICN",
+						"name": "Incheon International Airport"
+					},
+					"arrival_airport": {
+						"code": "BKK",
+						"name": "Suvarnabhumi Airport"
+					},
+					"departure_time": "2026-08-19T20:05:00",
+					"arrival_time": "2026-08-20T00:10:00",
+					"duration": 365,
+					"airline": {
+						"code": "7C",
+						"name": "Jeju Air"
+					},
+					"flight_number": "2503",
+					"aircraft": "Boeing 737MAX 8 Passenger",
+					"legroom": "29 inches",
+					"amenities": {
+						"power": true
+					}
+				}
+			],
+			"price": 37660.0,
+			"currency": "JPY",
+			"self_transfer": false,
+			"mixed_cabin": false,
+			"layovers": [
+				{
+					"airport": {
+						"code": "ICN",
+						"name": "Incheon International Airport"
+					},
+					"duration": 1280,
+					"overnight": true
+				}
+			]
+		},
+		{
+			"duration": 605,
+			"stops": 1,
+			"legs": [
+				{
+					"departure_airport": {
+						"code": "NRT",
+						"name": "Narita International Airport"
+					},
+					"arrival_airport": {
+						"code": "DAD",
+						"name": "Da Nang International Airport"
+					},
+					"departure_time": "2026-08-18T09:00:00",
+					"arrival_time": "2026-08-18T12:40:00",
+					"duration": 340,
+					"airline": {
+						"code": "VN",
+						"name": "Vietnam Airlines"
+					},
+					"flight_number": "319",
+					"aircraft": "Airbus A321",
+					"legroom": "32 inches"
+				},
+				{
+					"departure_airport": {
+						"code": "DAD",
+						"name": "Da Nang International Airport"
+					},
+					"arrival_airport": {
+						"code": "BKK",
+						"name": "Suvarnabhumi Airport"
+					},
+					"departure_time": "2026-08-18T15:15:00",
+					"arrival_time": "2026-08-18T17:05:00",
+					"duration": 110,
+					"airline": {
+						"code": "VN",
+						"name": "Vietnam Airlines"
+					},
+					"flight_number": "627",
+					"aircraft": "Airbus A321",
+					"legroom": "31 inches"
+				}
+			],
+			"price": null,
+			"currency": "JPY",
+			"self_transfer": false,
+			"mixed_cabin": false,
+			"layovers": [
+				{
+					"airport": {
+						"code": "DAD",
+						"name": "Da Nang International Airport"
+					},
+					"duration": 155
+				}
+			]
+		}
+	]
+}

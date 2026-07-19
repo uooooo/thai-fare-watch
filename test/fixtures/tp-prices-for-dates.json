@@ -1,0 +1,32 @@
+{
+	"success": true,
+	"currency": "jpy",
+	"data": [
+		{
+			"origin": "TYO",
+			"destination": "BKK",
+			"origin_airport": "NRT",
+			"destination_airport": "DMK",
+			"price": 14980,
+			"airline": "XJ",
+			"flight_number": "601",
+			"departure_at": "2026-08-02T09:15:00+09:00",
+			"transfers": 0,
+			"duration_to": 420,
+			"link": "/search/NRT0208BKK1"
+		},
+		{
+			"origin": "TYO",
+			"destination": "BKK",
+			"origin_airport": "HND",
+			"destination_airport": "BKK",
+			"price": 25800,
+			"airline": "TG",
+			"flight_number": "683",
+			"departure_at": "2026-08-05T00:20:00+09:00",
+			"transfers": 1,
+			"duration_to": 610,
+			"link": "/search/HND0508BKK1"
+		}
+	]
+}

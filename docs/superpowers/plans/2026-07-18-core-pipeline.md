@@ -361,7 +361,7 @@ export function monthsTouched(range: DateRange): string[] {
 // src/util/hash.ts
 export function stableId(...parts: (string | number | undefined)[]): string {
   const h = new Bun.CryptoHasher("sha256");
-  h.update(parts.map((p) => String(p ?? "")).join(" "));
+  h.update(parts.map((p) => String(p ?? "")).join("\u0000")); // NUL区切り: 空白入りパーツ("XJ 601"等)でも連結衝突しない
   return h.digest("hex").slice(0, 12);
 }
 ```

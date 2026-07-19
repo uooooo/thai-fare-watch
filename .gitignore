@@ -3,3 +3,7 @@ node_modules/
 *.log
 dist/
 test/fixtures/gf-live/
+test/fixtures/skyscanner/live/
+.superpowers/
+.worktrees/
+.skyscanner-profile/

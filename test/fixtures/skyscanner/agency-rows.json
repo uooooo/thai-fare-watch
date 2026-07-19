@@ -1,0 +1,15 @@
+[
+	{ "agency": "Thai AirAsia", "priceText": "¥8,990" },
+	{
+		"agency": "TravelHub",
+		"priceText": "¥8,750",
+		"badgeText": "おすすめの提供会社"
+	},
+	{ "agency": "Trip.com", "priceText": "¥9,200" },
+	{ "agency": "GoFlyCheap", "priceText": "¥8,600" },
+	{
+		"agency": "BudgetTrips",
+		"priceText": "¥8,500",
+		"badgeText": "期間限定セール"
+	}
+]

@@ -1,0 +1,42 @@
+name: watch
+
+on:
+  schedule:
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: watch
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: astral-sh/setup-uv@v6 # fliがuvxでPython版CLIを叩くために必要
+      - run: bun install --frozen-lockfile
+      - name: watch
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          TRAVELPAYOUTS_TOKEN: ${{ secrets.TRAVELPAYOUTS_TOKEN }}
+          SERPAPI_API_KEY: ${{ secrets.SERPAPI_API_KEY }}
+        run: |
+          bun run src/cli.ts watch --once --json || [ $? -eq 2 ]
+      - name: commit data
+        run: |
+          git config user.name "tfw-bot"
+          git config user.email "actions@users.noreply.github.com"
+          # 先にステージしてから index を比較する。git diff(--cached なし)は
+          # 未追跡の新規ファイル(初回のstate.json/毎月のfares/*.jsonl等)を検知できず、
+          # git scraping のデータが永久にコミットされないため。
+          git add -A -- data/
+          if ! git diff --cached --quiet -- data/; then
+            git commit -m "data: watch $(date -u +%Y-%m-%dT%H:%MZ)"
+            # ローカルMacランナーとの同時push衝突に備え1回だけrebaseリトライ(spec §6.12)
+            git push || (git pull --rebase && git push)
+          fi

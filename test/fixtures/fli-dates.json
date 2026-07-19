@@ -1,0 +1,47 @@
+{
+	"success": true,
+	"data_source": "google_flights",
+	"search_type": "dates",
+	"trip_type": "ONE_WAY",
+	"query": {
+		"origin": "NRT",
+		"destination": "BKK",
+		"start_date": "2026-08-15",
+		"end_date": "2026-08-21",
+		"trip_duration": 3,
+		"is_round_trip": false,
+		"cabin_class": "ECONOMY",
+		"max_stops": "ANY",
+		"departure_window": null,
+		"airlines": null,
+		"sort_by_price": false,
+		"days": []
+	},
+	"count": 4,
+	"dates": [
+		{
+			"departure_date": "2026-08-15",
+			"return_date": null,
+			"price": 31742.0,
+			"currency": "JPY"
+		},
+		{
+			"departure_date": "2026-08-16",
+			"return_date": null,
+			"price": 33675.0,
+			"currency": "JPY"
+		},
+		{
+			"departure_date": "2026-08-17",
+			"return_date": null,
+			"price": 36575.0,
+			"currency": "JPY"
+		},
+		{
+			"departure_date": "2026-08-18",
+			"return_date": null,
+			"price": null,
+			"currency": "JPY"
+		}
+	]
+}
