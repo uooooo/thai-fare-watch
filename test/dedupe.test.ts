@@ -6,7 +6,7 @@ import {
 	expireDeals,
 	shouldNotify,
 } from "../src/core/dedupe";
-import type { Itinerary } from "../src/types";
+import type { Itinerary, Leg } from "../src/types";
 
 const cfg = loadConfig({ env: {} });
 const it = (over: Partial<Itinerary>): Itinerary => ({
@@ -57,6 +57,45 @@ describe("shouldNotify", () => {
 				now,
 			),
 		).toBe(true);
+	});
+});
+
+describe("dealKey", () => {
+	test("groundレグ除外・複数区間・最初のflightレグ日付で構成される", () => {
+		const ground = {
+			kind: "ground",
+			mode: "bus",
+			from: "TYO",
+			to: "OSA",
+			priceJpy: 6000,
+			hours: 9,
+		};
+		const leg1 = {
+			id: "l1",
+			source: "fli",
+			origin: "KIX",
+			destination: "ICN",
+			departDate: "2026-08-02",
+			flightNumber: "LJ 202",
+			transfers: 0,
+			priceJpy: 5000,
+			market: "jp",
+			foundAt: "t",
+		};
+		const leg2 = {
+			id: "l2",
+			source: "fli",
+			origin: "ICN",
+			destination: "BKK",
+			departDate: "2026-08-02",
+			flightNumber: "TW 101",
+			transfers: 0,
+			priceJpy: 7000,
+			market: "kr",
+			foundAt: "t",
+		};
+		const key = dealKey(it({ legs: [ground, leg1, leg2] as Leg[] }));
+		expect(key).toBe("KIX-ICN,ICN-BKK|2026-08-02|LJ 202+TW 101|trusted");
 	});
 });
 
