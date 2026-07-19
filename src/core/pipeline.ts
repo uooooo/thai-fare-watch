@@ -38,13 +38,15 @@ const MARKET_BY_ORIGIN: Record<string, string> = {
 	HKG: "hk",
 	MNL: "ph",
 };
-function marketOf(origin: string): string {
+// exported: CLI (sweep/verify) が同じPOS市場推定を再利用するため(Task 14)。
+export function marketOf(origin: string): string {
 	return MARKET_BY_ORIGIN[origin] ?? "jp";
 }
 
 // 掃引対象ペア: (origins∪positioning)→destinations、(origins∪positioning)→hubs、
 // hubs→destinations、TYO→positioning(国内線アクセス)。重複ペアは除去する。
-function buildPairs(cfg: Config): OdPair[] {
+// exported: CLIのsweepコマンドが同じペア集合を再利用するため(Task 14)。
+export function buildPairs(cfg: Config): OdPair[] {
 	const originsPlus = [...cfg.origins, ...cfg.positioning];
 	const pairs: OdPair[] = [];
 	const seen = new Set<string>();

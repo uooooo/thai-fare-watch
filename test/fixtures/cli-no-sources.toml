@@ -1,0 +1,8 @@
+# CLI E2E用: 全ソース無効化+RSSフィード無し（外部API/ネットワークに一切触れない構成）。
+rss_feeds = []
+
+[fli]
+enabled = false
+
+[browser]
+enabled = false
