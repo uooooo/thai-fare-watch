@@ -31,8 +31,12 @@ jobs:
         run: |
           git config user.name "tfw-bot"
           git config user.email "actions@users.noreply.github.com"
-          if ! git diff --quiet -- data/; then
-            git add data/
+          # 先にステージしてから index を比較する。git diff(--cached なし)は
+          # 未追跡の新規ファイル(初回のstate.json/毎月のfares/*.jsonl等)を検知できず、
+          # git scraping のデータが永久にコミットされないため。
+          git add -A -- data/
+          if ! git diff --cached --quiet -- data/; then
             git commit -m "data: watch $(date -u +%Y-%m-%dT%H:%MZ)"
-            git pull --rebase && git push
+            # ローカルMacランナーとの同時push衝突に備え1回だけrebaseリトライ(spec §6.12)
+            git push || (git pull --rebase && git push)
           fi
