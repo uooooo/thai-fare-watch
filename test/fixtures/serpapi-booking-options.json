@@ -1,0 +1,28 @@
+{
+	"booking_options": [
+		{
+			"together": {
+				"book_with": "ZIPAIR",
+				"airline": true,
+				"price": 14980,
+				"booking_request": { "url": "https://www.zipair.net/..." }
+			}
+		},
+		{
+			"together": {
+				"book_with": "Trip.com",
+				"airline": false,
+				"price": 15100,
+				"booking_request": { "url": "https://trip.com/..." }
+			}
+		},
+		{
+			"together": {
+				"book_with": "Gotogate",
+				"airline": false,
+				"price": 13900,
+				"booking_request": { "url": "https://gotogate.example/..." }
+			}
+		}
+	]
+}

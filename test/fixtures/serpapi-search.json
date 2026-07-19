@@ -1,0 +1,38 @@
+{
+	"best_flights": [
+		{
+			"flights": [
+				{
+					"departure_airport": { "id": "NRT", "time": "2026-08-02 09:15" },
+					"arrival_airport": { "id": "DMK", "time": "2026-08-02 14:10" },
+					"airline": "Thai AirAsia X",
+					"flight_number": "XJ 601"
+				}
+			],
+			"price": 14980,
+			"total_duration": 415,
+			"booking_token": "bt-abc"
+		}
+	],
+	"other_flights": [
+		{
+			"flights": [
+				{
+					"departure_airport": { "id": "NRT", "time": "2026-08-02 10:00" },
+					"arrival_airport": { "id": "TPE", "time": "2026-08-02 13:00" },
+					"airline": "Scoot",
+					"flight_number": "TR 899"
+				},
+				{
+					"departure_airport": { "id": "TPE", "time": "2026-08-02 15:00" },
+					"arrival_airport": { "id": "BKK", "time": "2026-08-02 18:00" },
+					"airline": "Scoot",
+					"flight_number": "TR 866"
+				}
+			],
+			"price": 18200,
+			"total_duration": 540,
+			"booking_token": "bt-def"
+		}
+	]
+}
