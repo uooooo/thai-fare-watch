@@ -33,6 +33,38 @@ describe("classifySeller", () => {
 			),
 		).toBe("airline");
 	});
+	// 実運用検証で発見: Google Flightsは直販の販売元を「ZIPAIR Tokyo」等と表記するため、
+	// 運航会社名"ZIPAIR"と完全一致せず、完全一致のみだとLCC直販(¥1万級の主役)を全て取り
+	// こぼす。seller ⊇ airline(運航会社名4文字以上)の内包判定で直販として拾う。
+	test("販売元名が運航会社名を内包→airline（ZIPAIR Tokyo ⊇ ZIPAIR）", () => {
+		expect(
+			classifySeller(
+				{ seller: "ZIPAIR Tokyo", legAirlines: ["ZIPAIR"] },
+				trusted,
+			),
+		).toBe("airline");
+		expect(
+			classifySeller(
+				{ seller: "AirAsia (エアアジア)", legAirlines: ["AirAsia"] },
+				trusted,
+			),
+		).toBe("airline");
+	});
+	test("短い部分文字列の逆方向なりすまし(seller ⊂ airline)は引き続き遮断（T9）", () => {
+		for (const seller of ["ZIP", "Air", "Thai", "Z", "AIR"]) {
+			expect(
+				classifySeller(
+					{ seller, legAirlines: ["ZIPAIR", "Thai AirAsia X"] },
+					trusted,
+				),
+			).toBe("reference");
+		}
+	});
+	test("短い運航会社名(4文字未満)は無関係な販売元名に偶然内包されても誤判定しない", () => {
+		expect(
+			classifySeller({ seller: "Museum Tours", legAirlines: ["US"] }, trusted),
+		).toBe("reference");
+	});
 	test("trusted OTAは部分一致（trip.com）", () => {
 		expect(
 			classifySeller(
