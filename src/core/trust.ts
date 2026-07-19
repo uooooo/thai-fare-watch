@@ -34,6 +34,10 @@ function normalizedEquals(a: string, b: string): boolean {
 	return a === b;
 }
 
+// 運航会社名がこの文字数(正規化後)以上のときだけ「販売元名が運航会社名を内包」判定を許す。
+// 短い航空会社コード/名が無関係な販売元名に偶然内包されるのを防ぐための下限。
+const AIRLINE_CONTAIN_MIN = 4;
+
 export function classifySeller(
 	input: {
 		seller: string;
@@ -51,14 +55,28 @@ export function classifySeller(
 	// 1. ソース側のヒント（例: SerpAPIのairlineフラグ）を無条件で信用する。
 	if (input.isAirlineDirectHint === true) return "airline";
 
-	// 2. 販売元名を正規化し、運航会社名（leg）のいずれかと完全一致すればairline。
-	//    normalizeSellerが「で予約/にて予約」接尾辞を剥がすため、「Thai AirAsia Xで予約」は
-	//    正規化後「Thai AirAsia X」と完全一致になる（=表記揺れの吸収はnormalizeSeller側の
-	//    責務であり、ここでの一致判定は完全一致のみ）。部分一致・前方一致は採用しない
-	//    （詳細はnormalizedEqualsのコメント参照）。
+	// 2. 販売元名を正規化し、運航会社名（leg）と照合してairlineか判定する。
+	//    (a) 完全一致 — normalizeSellerが「で予約/にて予約」接尾辞を剥がすため、
+	//        「Thai AirAsia Xで予約」は正規化後「Thai AirAsia X」と完全一致になる。
+	//    (b) 販売元名が運航会社名を「内包」する場合も直販とみなす（一方向: seller ⊇ airline）。
+	//        実データではGoogle Flightsが直販の販売元名を「ZIPAIR Tokyo」等と表記し、運航
+	//        会社名 "ZIPAIR" と完全一致しないため、(a)だけだと¥1万級のLCC直販を全て取り
+	//        こぼす（この監視botの核心要件）。なりすまし対策として方向と長さを制限する:
+	//        (i) 方向は seller ⊇ airline のみ。過去のなりすまし(Adversarial review)は
+	//            seller ⊂ airline の逆方向（"Air"/"ZIP"/"Thai"等の短い販売元名が運航会社名
+	//            側に内包される）だったため、この方向限定で引き続き遮断される。
+	//        (ii) 運航会社名は正規化後 AIRLINE_CONTAIN_MIN 文字以上に限る（短い航空会社
+	//             コードが無関係な販売元名に偶然内包されるのを防ぐ。例: "US"が"museumtours"に）。
+	//    残存リスク: 「ZIPAIR ○○」のように運航会社名を前置した別名を騙る販売元は(b)で
+	//    airline判定され得るが、(b)が効くのはGoogle Flightsの審査済み予約パートナー
+	//    (gf-browser)経由の販売元に限られ、SerpAPIは権威ある airline フラグ(rule 1)を使うため
+	//    影響しない。核心要件(LCC直販の網羅)を満たすための許容トレードオフ。
 	const seller = normalizeSeller(input.seller);
 	const legAirlines = input.legAirlines.map(normalizeSeller);
-	if (legAirlines.some((leg) => normalizedEquals(seller, leg))) {
+	const airlineMatch = (leg: string): boolean =>
+		normalizedEquals(seller, leg) ||
+		(leg.length >= AIRLINE_CONTAIN_MIN && seller.includes(leg));
+	if (legAirlines.some(airlineMatch)) {
 		return "airline";
 	}
 
