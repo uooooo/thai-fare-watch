@@ -36,6 +36,17 @@ describe("fetchJson", () => {
 			}),
 		).toEqual({ ok: 2 });
 	});
+	test("リトライ上限まで429が続けばHttpErrorで打ち切る", async () => {
+		let calls = 0;
+		const f = (async () => {
+			calls++;
+			return new Response("slow down", { status: 429 });
+		}) as unknown as typeof fetch;
+		await expect(
+			fetchJson("https://x/", { fetchImpl: f, retries: 1 }),
+		).rejects.toBeInstanceOf(HttpError);
+		expect(calls).toBe(2); // 初回 + リトライ1回で枯渇
+	});
 	test("404は即HttpError（リトライしない）", async () => {
 		let calls = 0;
 		const f = (async () => {
