@@ -163,3 +163,55 @@ export class Store {
 		this.writeJson("health.json", h);
 	}
 }
+
+// dryRun専用ラッパ(C1)。makeCiBreaker(fliのCB状態)やSerpApiSourceのQuotaManagerのように、
+// ソース実装内部がpipelineの`!dryRun`ガードを経由せず直接Storeへ書き込むコードパスがある。
+// dryRun実行中にこれらが実ディスク(state.json/quota.json)を書き換えてしまうと、例えば
+// fliが3回失敗するだけでdryRun runからでも本物のCIサーキットブレーカが6時間openしてしまう。
+// 読み取り系は全て実storeへ委譲(dryRunでも直近の状態は正しく見える)。書き込み系
+// (writeState/writeQuota/writeDeals/writeHealth/appendFares/appendNotified)は全てno-op。
+class DryRunStore extends Store {
+	constructor(private readonly inner: Store) {
+		super();
+	}
+
+	override readState(): StateFile {
+		return this.inner.readState();
+	}
+	override writeState(_s: StateFile): void {}
+
+	override appendFares(_obs: FareObservation[]): void {}
+	override readRecentFares(hours: number, now?: Date): FareObservation[] {
+		return this.inner.readRecentFares(hours, now);
+	}
+
+	override readDeals(): Itinerary[] {
+		return this.inner.readDeals();
+	}
+	override writeDeals(_deals: Itinerary[]): void {}
+
+	override readQuota(): { month: string; used: number } {
+		return this.inner.readQuota();
+	}
+	override writeQuota(_q: { month: string; used: number }): void {}
+
+	override appendNotified(_entry: object): void {}
+	override readNotified(): Record<
+		string,
+		{ priceJpy: number; at: string; tier: string }
+	> {
+		return this.inner.readNotified();
+	}
+
+	override readHealth(): Record<string, SourceHealth> {
+		return this.inner.readHealth();
+	}
+	override writeHealth(_h: Record<string, SourceHealth>): void {}
+}
+
+// dryRun呼び出し元は、pipeline.runWatchOnceにdryRun:trueを渡すだけでは不十分 —
+// ソース内部が直接触るStore(fliのCB/SerpAPIのクォータ等)を守るには、この関数で包んだ
+// Storeをソースへ渡す側(例: buildSources)にも明示的にdryRunを伝える必要がある。
+export function makeDryRunStore(store: Store): Store {
+	return new DryRunStore(store);
+}

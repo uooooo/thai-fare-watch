@@ -66,7 +66,11 @@ function errMsg(err: unknown): string {
 }
 
 const VERIFY_BATCH_MAX = 5;
+const VERIFY_QUEUE_MAX = 50;
 const HEALTH_FAILURE_THRESHOLD = 6;
+// RSSでマッチが出た回(I3)は、この2窓を(due/undueに関わらず)強制的に即時掃引する。
+// セール速報は鮮度が命なので、次の定期掃引まで待たずに反応する。
+const RSS_FORCE_WINDOW_NAMES = ["immediate", "near"];
 
 // watch実行1回分。dueなジョブだけ処理し、常に(dryRunでも)全量計算した上で
 // 実際のnotifier送信/state永続化だけをdryRunで抑制する。
@@ -94,7 +98,11 @@ export async function runWatchOnce(deps: {
 	let nextVerifyQueue: string[] = [...state.verifyQueue];
 
 	// ソース稼働状況(health.json)。成功でconsecutiveFailuresリセット、失敗で+1し、
-	// ちょうど6回目到達時(かつ本日まだ警告していなければ)health embedを追加する。
+	// ちょうど6回目到達時(かつ本日まだ警告embedを実際に積んでいなければ)health embedを
+	// 追加する。"本日警告済み"の判定はlastAlertedAt(=embedを実際に積んだ時刻)のみを見る
+	// (I4)。lastErrorAtは単発失敗でも毎回更新されるため、それを基準にすると「OKで
+	// consecutiveFailuresがリセットされた後に発生した、本来警告すべき新しい6連続失敗」
+	// まで誤って抑制してしまう。
 	const health = store.readHealth();
 	const healthEmbeds: object[] = [];
 	function recordHealthOk(name: string): void {
@@ -107,29 +115,63 @@ export async function runWatchOnce(deps: {
 	function recordHealthFailure(name: string, message: string): void {
 		const prev = health[name] ?? { consecutiveFailures: 0 };
 		const consecutiveFailures = prev.consecutiveFailures + 1;
-		const alreadyWarnedToday =
-			prev.lastErrorAt !== undefined &&
-			todayJst(new Date(prev.lastErrorAt)) === todayJst(env.now);
+		const alreadyAlertedToday =
+			prev.lastAlertedAt !== undefined &&
+			todayJst(new Date(prev.lastAlertedAt)) === todayJst(env.now);
 		const next: SourceHealth = {
 			...prev,
 			lastErrorAt: env.now.toISOString(),
 			lastError: message,
 			consecutiveFailures,
 		};
-		health[name] = next;
 		if (
 			consecutiveFailures === HEALTH_FAILURE_THRESHOLD &&
-			!alreadyWarnedToday
+			!alreadyAlertedToday
 		) {
+			next.lastAlertedAt = env.now.toISOString();
 			healthEmbeds.push(buildHealthEmbed(name, next));
+		}
+		health[name] = next;
+	}
+
+	// 2. rss job: pollしてマッチをニュースembed化。poll失敗時はそのフィードの
+	// lastRun/rssSeenを更新しない(次回再試行させる)。窓の強制due化判定(I3)に使うため、
+	// 実際にマッチが出たかどうかをrssMatchedに記録する。window jobより必ず先に評価する。
+	let rssMatched = false;
+	for (const job of due) {
+		if (job.kind !== "rss") continue;
+		try {
+			const seenBefore = state.rssSeen[job.feed.name] ?? [];
+			const { news, seen } = await rss.poll(job.feed, seenBefore);
+			if (news.length > 0) rssMatched = true;
+			for (const n of news) newsEmbeds.push(buildNewsEmbed(n));
+			nextRssSeen[job.feed.name] = seen;
+			jobsRun.push(job.id);
+			nextLastRuns[job.id] = env.now.toISOString();
+		} catch (err) {
+			errors.push(`rss:${job.feed.name}: ${errMsg(err)}`);
 		}
 	}
 
-	// 2. window job: 掃引可能ソース(sweepあり&&available)を全due窓に対して実行。
+	// 3. window job: 掃引可能ソース(sweepあり&&available)を全due窓に対して実行。
 	// ソース単位の例外はerrorsに積んで継続する(窓ジョブ自体はlastRunを更新する)。
+	// RSSで今回マッチが出た場合(I3)は、immediate/near窓が(まだdueでなくても)due窓集合に
+	// 強制的に加わる — セール速報が出た直後は、次の定期掃引まで待たずに即時反応したい。
+	// 強制分もdue分と全く同じコード経路(このループ)で処理し、lastRun/jobsRunも同様に記録する。
 	const pairs = buildPairs(cfg);
 	const sweepSources = sources.filter((s) => s.sweep);
-	for (const job of due) {
+	const dueWindowJobs = due.filter((j) => j.kind === "window");
+	const dueWindowIds = new Set(dueWindowJobs.map((j) => j.id));
+	const forcedWindowJobs = rssMatched
+		? allJobs(cfg).filter(
+				(j) =>
+					j.kind === "window" &&
+					RSS_FORCE_WINDOW_NAMES.includes(j.window.name) &&
+					!dueWindowIds.has(j.id),
+			)
+		: [];
+	const windowJobsToRun = [...dueWindowJobs, ...forcedWindowJobs];
+	for (const job of windowJobsToRun) {
 		if (job.kind !== "window") continue;
 		const range = windowToRange(job.window.from, job.window.to, env.now);
 		for (const source of sweepSources) {
@@ -145,22 +187,6 @@ export async function runWatchOnce(deps: {
 		}
 		jobsRun.push(job.id);
 		nextLastRuns[job.id] = env.now.toISOString();
-	}
-
-	// 3. rss job: pollしてマッチをニュースembed化。poll失敗時はそのフィードの
-	// lastRun/rssSeenを更新しない(次回再試行させる)。
-	for (const job of due) {
-		if (job.kind !== "rss") continue;
-		try {
-			const seenBefore = state.rssSeen[job.feed.name] ?? [];
-			const { news, seen } = await rss.poll(job.feed, seenBefore);
-			for (const n of news) newsEmbeds.push(buildNewsEmbed(n));
-			nextRssSeen[job.feed.name] = seen;
-			jobsRun.push(job.id);
-			nextLastRuns[job.id] = env.now.toISOString();
-		} catch (err) {
-			errors.push(`rss:${job.feed.name}: ${errMsg(err)}`);
-		}
 	}
 
 	// 4. deep-sweep: "gf-browser"という名のソースが実際に登録・available出来ている
@@ -227,13 +253,14 @@ export async function runWatchOnce(deps: {
 		todayJst(env.now),
 	);
 
-	// 6. 検証: 通知しきい値(notify_max×watch_margin)以下・安い順に最大5件だけ検証する。
+	// 6. 検証: 通知しきい値(notify_max×watch_margin)以下・安い順の適格候補(eligible)の
+	// うち、先頭最大5件(candidates)だけを実際に検証する。残りはC2でverifyQueueに積む。
 	const verifyThreshold =
 		cfg.thresholds.notify_max * cfg.thresholds.watch_margin;
-	const candidates = [...combined]
+	const eligible = [...combined]
 		.filter((it) => it.totalJpy <= verifyThreshold)
-		.sort((a, b) => a.totalJpy - b.totalJpy)
-		.slice(0, VERIFY_BATCH_MAX);
+		.sort((a, b) => a.totalJpy - b.totalJpy);
+	const candidates = eligible.slice(0, VERIFY_BATCH_MAX);
 
 	const verifiedById = new Map<string, Itinerary>();
 	const sellerById = new Map<string, SellerOffer>();
@@ -259,6 +286,25 @@ export async function runWatchOnce(deps: {
 	for (const [id, q] of queuedVerified) {
 		if (q.seller) sellerById.set(id, q.seller);
 	}
+
+	// C2: eligibleのうちcandidates(先頭5件)からあふれた分で、この回"verified"に到達
+	// しなかったものは、次回以降のverify-queueコンシューマが拾えるようstate.verifyQueueへ
+	// 積む(重複除去・安い順を保持・上限50件)。積むidは必ずfinal(=この回writeDealsする
+	// 配列)に含まれるものだけにする — コンシューマはdeals.jsonからidを引くため、そこに
+	// 存在しないidを積んでも永久に消化されない死んだ参照になってしまう。
+	const finalById = new Map(final.map((it) => [it.id, it]));
+	const remainingToQueue = eligible
+		.slice(VERIFY_BATCH_MAX)
+		.filter((it) => (finalById.get(it.id) ?? it).verification !== "verified")
+		.map((it) => it.id);
+	const seenQueueIds = new Set<string>();
+	const mergedQueue: string[] = [];
+	for (const id of [...remainingToQueue, ...nextVerifyQueue]) {
+		if (seenQueueIds.has(id)) continue;
+		seenQueueIds.add(id);
+		mergedQueue.push(id);
+	}
+	nextVerifyQueue = mergedQueue.slice(0, VERIFY_QUEUE_MAX);
 
 	// 7. 通知: tier(flash/deal/candidate)が付いたものだけ再通知抑制ルールにかける。
 	const notifiedMap = store.readNotified();
@@ -293,16 +339,26 @@ export async function runWatchOnce(deps: {
 	// 8. 永続化(dryRunなら何も書かない)。lastRuns/rssSeen/verifyQueueは実行前スナップショット
 	// (state)ではなく直前に再読込したstateにマージする — sweep/verify中にfliブレーカ等が
 	// 直接writeStateしている可能性があり、そちらを上書きしないため。
+	// appendNotifiedはnotifierが実際に存在する場合のみ行う(I6・sendと同じ条件)。notifierが
+	// 無ければDiscordには何も送っていないのに「通知済み」を記録してしまうと、後で通知手段を
+	// 用意した際にshouldNotifyの再通知抑制に阻まれ、本来送るべき初回通知が飛ばなくなる。
 	if (!dryRun) {
-		store.appendFares(runObservations);
+		// spec 6.12: fares/*.jsonlの肥大化防止のため、notify_max*2を超える観測は
+		// このrunのcombine()には使うが永続化はしない(フィルタは永続化のみに適用する)。
+		const faresToPersist = runObservations.filter(
+			(o) => o.priceJpy <= cfg.thresholds.notify_max * 2,
+		);
+		store.appendFares(faresToPersist);
 		store.writeDeals(final);
-		for (const d of sentDeals) {
-			store.appendNotified({
-				dealKey: d.key,
-				priceJpy: d.priceJpy,
-				at: d.at,
-				tier: d.tier,
-			});
+		if (notifier) {
+			for (const d of sentDeals) {
+				store.appendNotified({
+					dealKey: d.key,
+					priceJpy: d.priceJpy,
+					at: d.at,
+					tier: d.tier,
+				});
+			}
 		}
 		const latest = store.readState();
 		store.writeState({

@@ -16,13 +16,16 @@ export type VerifyDeps = { sources: FareSource[]; env: RunnerEnv; cfg: Config };
 
 const PRICE_BAND_RATIO = 0.2;
 
-// 同便名優先。無ければ±20%以内の最安をマッチとする。
+// 同便名の完全一致を優先。レグに便名があっても完全一致が無い場合(I5)、および
+// レグに便名が無い場合の両方で、±20%価格帯内の最安をフォールバックとする。
+// どちらにも当たらない場合のみ不一致(undefined)。
 function matchOffer(
 	offers: VerifiedOffer[],
 	leg: FareObservation,
 ): VerifiedOffer | undefined {
 	if (leg.flightNumber) {
-		return offers.find((o) => o.flightNumber === leg.flightNumber);
+		const exact = offers.find((o) => o.flightNumber === leg.flightNumber);
+		if (exact) return exact;
 	}
 	const band = leg.priceJpy * PRICE_BAND_RATIO;
 	const withinBand = offers.filter(
@@ -133,15 +136,15 @@ function recomputeTotals(it: Itinerary, cfg: Config): Itinerary {
 }
 
 // 検証パイプライン本体。
-// 1. fli(利用可能なら)で全flightレグの価格確認。1レグでも不一致なら元のitineraryを
-//    無変更で返す(seller無し)。
+// 1. fli(利用可能なら)で全flightレグの価格確認(同便名優先、無ければ±20%価格帯内の
+//    最安にフォールバック)。1レグでも不一致なら"unverified"に強制復帰させた新規
+//    itinerary(seller無し)を返す(Minor#7: 元の参照はそのまま返さない)。
 // 2. 販売元ソース(gf-browser優先、無ければserpapi)で各flightレグを検証し、
-//    applyTrust→bestTrustedSellerでtrusted seller有無を判定。
+//    applyTrust→bestTrustedSellerでtrusted seller有無を判定(同じmatchOfferフォールバックを使う)。
 // 3. 全レグtrusted→"verified" / 一部→"partial" / それ以外はstage1の結果を保持
 //    ("price_confirmed" if stage1実行、そうでなければ元のverification)。
 // 4. QuotaExceededErrorはseller検証を打ち切り、price_confirmed(またはそのまま)へ縮退する。
-// 入力itineraryは変更しない(常に新規オブジェクトを返す。ただしstage1で不一致の場合は
-// 元の参照をそのまま返す=内容は無変更)。
+// 入力itineraryは変更しない(常に新規オブジェクトを返す)。
 export async function verifyItinerary(
 	it: Itinerary,
 	deps: VerifyDeps,
@@ -155,7 +158,7 @@ export async function verifyItinerary(
 	let stage1Ran = false;
 	if (fli) {
 		const updated = await priceConfirmStage(it.legs, fli);
-		if (!updated) return { itinerary: it };
+		if (!updated) return { itinerary: { ...it, verification: "unverified" } };
 		legs = updated;
 		stage1Ran = true;
 	}

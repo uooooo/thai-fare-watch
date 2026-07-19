@@ -70,6 +70,10 @@ export type SourceHealth = {
 	lastErrorAt?: string;
 	lastError?: string;
 	consecutiveFailures: number;
+	// health embedを実際にキューへ積んだ時刻(ISO8601)。1日1回ガード(I4)はこれだけを見る —
+	// lastErrorAtは失敗ごとに毎回更新されるため、それを基準にすると「OKでconsecutiveFailures
+	// がリセットされた後の新しい6連続失敗」まで誤って抑制してしまう。
+	lastAlertedAt?: string;
 };
 
 export type DateRange = { from: string; to: string }; // 両端含む YYYY-MM-DD
