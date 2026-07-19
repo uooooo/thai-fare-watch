@@ -214,7 +214,9 @@ describe("DiscordNotifier", () => {
 		});
 		await n.send(Array.from({ length: 11 }, (_, i) => ({ title: `e${i}` })));
 		expect(calls).toHaveLength(2);
-		expect(JSON.parse(calls[0]!).embeds).toHaveLength(10);
+		const firstBody = calls[0];
+		if (!firstBody) throw new Error("expected first webhook call body");
+		expect(JSON.parse(firstBody).embeds).toHaveLength(10);
 	});
 
 	test("?wait=trueを付与しcontent-type: application/jsonでPOSTする", async () => {
