@@ -7,7 +7,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import type { FareObservation, Itinerary, SourceHealth } from "../types";
-import { addDays, monthsTouched, todayJst } from "../util/dates";
+import { monthsTouched, todayJst } from "../util/dates";
 
 export type StateFile = {
 	lastRuns: Record<string, string>; // jobId -> ISO8601
@@ -21,12 +21,17 @@ function emptyState(): StateFile {
 }
 
 // obs.foundAtはISO8601(UTC)。appendFaresはslice(0,7)でそのまま月ファイル名にするため、
-// 「当月」もnowのUTC日付基準で揃える（JSTには寄せない）。
-function currentAndPreviousMonths(now: Date): string[] {
-	const today = now.toISOString().slice(0, 10);
-	const firstOfMonth = `${today.slice(0, 7)}-01`;
-	const lastOfPrevMonth = addDays(firstOfMonth, -1);
-	return monthsTouched({ from: lastOfPrevMonth, to: today });
+// 月範囲もnowのUTC日付基準で揃える（JSTには寄せない）。
+// finding #3: 以前は常に「当月+前月」固定だったため、hoursで指定した窓が3ヶ月以上に
+// 渡って跨ぐ場合（例: tfw historyの45日=24*45h呼び出しが月初近くのnowで実行される場合）に
+// 古い月のファイルを一切読まず、cutoff内のはずの観測が黙って欠落していた。
+// [now-hours, now]が実際に触れる月を全て返すことで、この欠落を防ぐ。
+function monthsForRecentFares(hours: number, now: Date): string[] {
+	const from = new Date(now.getTime() - hours * 3_600_000)
+		.toISOString()
+		.slice(0, 10);
+	const to = now.toISOString().slice(0, 10);
+	return monthsTouched({ from, to });
 }
 
 function currentJstMonth(): string {
@@ -101,7 +106,7 @@ export class Store {
 		const base = now ?? new Date();
 		const cutoff = base.getTime() - hours * 3_600_000;
 		const out: FareObservation[] = [];
-		for (const month of currentAndPreviousMonths(base)) {
+		for (const month of monthsForRecentFares(hours, base)) {
 			const rows = this.readJsonl<FareObservation>(
 				join("fares", `${month}.jsonl`),
 			);

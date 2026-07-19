@@ -293,6 +293,17 @@ export async function runWatchOnce(deps: {
 		if (q.seller) sellerById.set(id, q.seller);
 	}
 
+	// 最終レビュー Important #2: 検証バッチ(先頭5件)からあふれたeligible(=totalJpyが
+	// 通知しきい値以下)なitineraryにも、既存tierを上書きしない範囲でtierを付与する。
+	// assignTierはunverifiedでも≤notify_maxなら"candidate"を返すため、リッチなセールで
+	// eligibleが5件を超えても、通知/再通知抑制(shouldNotify)の対象になる
+	// (verified済みのflash/dealはit.tierが既に付いているため、ここでは上書きしない)。
+	for (const it of final) {
+		if (it.tier) continue;
+		if (it.totalJpy > verifyThreshold) continue;
+		it.tier = assignTier(it, cfg);
+	}
+
 	// C2: eligibleのうちcandidates(先頭5件)からあふれた分で、この回"verified"に到達
 	// しなかったものは、次回以降のverify-queueコンシューマが拾えるようstate.verifyQueueへ
 	// 積む(重複除去・安い順を保持・上限50件)。積むidは必ずfinal(=この回writeDealsする
@@ -337,17 +348,32 @@ export async function runWatchOnce(deps: {
 		notifiedCount++;
 	}
 
+	// 最終レビュー Critical: notifier.send失敗はここで必ず捕まえる。Discordが404(webhook
+	// rotate)/429・5xx(リトライ尽き)/400(embed肥大)等で例外を投げても、その例外を
+	// runWatchOnce全体まで伝播させてはいけない — section 8の永続化(appendFares/writeDeals/
+	// writeState/writeHealth)が丸ごとスキップされ、観測ロスト・lastRunsが進まずCIが同じ
+	// ジョブを無限に再発火・部分送信済みチャンクが次回重複送信される、という三重の被害が出る。
+	let notifySent = true;
 	const allEmbeds = [...newsEmbeds, ...dealEmbeds, ...healthEmbeds];
 	if (notifier && allEmbeds.length > 0 && !dryRun) {
-		await notifier.send(allEmbeds);
+		try {
+			await notifier.send(allEmbeds);
+		} catch (err) {
+			notifySent = false;
+			errors.push(`notify: ${errMsg(err)}`);
+			recordHealthFailure("discord", errMsg(err));
+		}
 	}
 
 	// 8. 永続化(dryRunなら何も書かない)。lastRuns/rssSeen/verifyQueueは実行前スナップショット
 	// (state)ではなく直前に再読込したstateにマージする — sweep/verify中にfliブレーカ等が
 	// 直接writeStateしている可能性があり、そちらを上書きしないため。
-	// appendNotifiedはnotifierが実際に存在する場合のみ行う(I6・sendと同じ条件)。notifierが
-	// 無ければDiscordには何も送っていないのに「通知済み」を記録してしまうと、後で通知手段を
-	// 用意した際にshouldNotifyの再通知抑制に阻まれ、本来送るべき初回通知が飛ばなくなる。
+	// appendNotifiedはnotifierが実際に存在し、かつ送信が実際に成功した場合のみ行う
+	// (I6・sendと同じ条件 + Critical: notifySent)。notifierが無ければDiscordには何も
+	// 送っていないのに「通知済み」を記録してしまうと、後で通知手段を用意した際に
+	// shouldNotifyの再通知抑制に阻まれ、本来送るべき初回通知が飛ばなくなる。送信に失敗した
+	// 場合も同様の理由で記録してはいけない — 記録しなければ次回また送り直すだけ(重複、安全側)
+	// だが、記録してしまうと届いていないdealを黙って再送対象から外してしまう(ロスト、危険側)。
 	if (!dryRun) {
 		// spec 6.12: fares/*.jsonlの肥大化防止のため、notify_max*2を超える観測は
 		// このrunのcombine()には使うが永続化はしない(フィルタは永続化のみに適用する)。
@@ -356,7 +382,7 @@ export async function runWatchOnce(deps: {
 		);
 		store.appendFares(faresToPersist);
 		store.writeDeals(final);
-		if (notifier) {
+		if (notifier && notifySent) {
 			for (const d of sentDeals) {
 				store.appendNotified({
 					dealKey: d.key,

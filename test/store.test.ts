@@ -44,6 +44,24 @@ describe("Store", () => {
 		const s = new Store(dir());
 		expect(s.readQuota().used).toBe(0);
 	});
+	// --- 最終レビュー Important #3: readRecentFaresがhoursを無視して月選択する ---
+	test("readRecentFaresはhoursの範囲が跨ぐ月まで読む(3ヶ月跨ぎ, finding #3)", () => {
+		const s = new Store(dir());
+		// now=3/3、hours=24*45(45日)なので、月範囲としては1月17日まで遡る必要がある。
+		// 旧実装は常に「当月+前月」(2月+3月)固定で、1月ファイルを一切読まなかった。
+		const now = new Date("2026-03-03T00:00:00Z");
+		const within = obs({
+			id: "jan-in-cutoff",
+			foundAt: new Date("2026-01-22T00:00:00Z").toISOString(), // now-40日、cutoff(now-45日=1/17)より新しい
+		});
+		const tooOld = obs({
+			id: "jan-before-cutoff",
+			foundAt: new Date("2026-01-10T00:00:00Z").toISOString(), // cutoffより古い→除外され続ける
+		});
+		s.appendFares([within, tooOld]);
+		const got = s.readRecentFares(24 * 45, now);
+		expect(got.map((o) => o.id)).toEqual(["jan-in-cutoff"]);
+	});
 	test("notifiedは同キーの最新を返す", () => {
 		const s = new Store(dir());
 		s.appendNotified({
