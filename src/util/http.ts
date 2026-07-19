@@ -1,11 +1,56 @@
+// クエリパラメータの"鍵"としてよくある秘密系の名前。値を"***"に伏せる対象(大文字小文字は無視)。
+const SECRET_QUERY_KEY_RE =
+	/^(api_key|apikey|token|key|secret|sig|signature|password|access_token)$/i;
+
+// Discord webhook: https://discord.com/api/webhooks/<id>/<token> —tokenそのものが秘密で、
+// クエリパラメータではなくパスの一部として乗っている特殊系(ホスト名には依存しない —プロキシ経由
+// でも同じパス形状なら伏せられるようにする)。
+const WEBHOOK_TOKEN_RE = /(\/api\/webhooks\/\d+\/)[^/?#]+/;
+
+// クエリの`key=value`を文字列のまま伏せる(new URL()がパースに失敗した場合のfallback用)。
+// 本来のURLとして不正な入力でも、少なくとも秘密らしき部分だけは確実に伏せて返す。
+const SECRET_QUERY_VALUE_RE =
+	/([?&](?:api_key|apikey|token|key|secret|sig|signature|password|access_token)=)[^&#]*/gi;
+
+function regexScrub(raw: string): string {
+	return raw
+		.replace(SECRET_QUERY_VALUE_RE, "$1***")
+		.replace(WEBHOOK_TOKEN_RE, "$1***");
+}
+
+// URL中の秘密(クエリパラメータの値・Discord webhookのトークンパスセグメント)を"***"に置換して
+// 返す。HttpError.message/.urlや将来のあらゆるログ出力の根本対策 —秘密が平文でCLI標準出力/
+// health.json(publicリポジトリにcommitされ得る)へ漏れることを構造的に防ぐ。
+export function redactUrl(raw: string): string {
+	let u: URL;
+	try {
+		u = new URL(raw);
+	} catch {
+		return regexScrub(raw);
+	}
+	for (const key of [...u.searchParams.keys()]) {
+		if (SECRET_QUERY_KEY_RE.test(key)) u.searchParams.set(key, "***");
+	}
+	u.pathname = u.pathname.replace(WEBHOOK_TOKEN_RE, "$1***");
+	return u.toString();
+}
+
 export class HttpError extends Error {
-	constructor(
-		public status: number,
-		public url: string,
-		body?: string,
-	) {
-		super(`HTTP ${status} for ${url}${body ? `: ${body}` : ""}`);
+	public status: number;
+	public url: string;
+	public body?: string;
+
+	constructor(status: number, url: string, body?: string) {
+		// bodyはmessageに含めない —レスポンス本文が秘密をエコーし返すケースもあるため。必要なら
+		// 呼び出し側は.bodyフィールドを個別に見る(ただしそちらも表示・ログ時は呼び出し側の責任で
+		// 秘密混入に注意すること)。
+		super(`HTTP ${status} for ${redactUrl(url)}`);
 		this.name = "HttpError";
+		this.status = status;
+		// 生URL(秘密を含み得る)は保持しない —どの消費者にとってもredact済みで十分
+		// (health.json送り/CLI出力送りいずれの将来の使途でも安全側に倒す)。
+		this.url = redactUrl(url);
+		this.body = body;
 	}
 }
 

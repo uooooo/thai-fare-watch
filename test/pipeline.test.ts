@@ -7,6 +7,7 @@ import { runWatchOnce } from "../src/core/pipeline";
 import { RssSignal } from "../src/signals/rss";
 import { Store } from "../src/state/store";
 import type { FareObservation, VerifiedOffer } from "../src/types";
+import { HttpError } from "../src/util/http";
 
 const cfg = loadConfig({
 	env: { DISCORD_WEBHOOK_URL: "https://discord.example/wh" },
@@ -250,6 +251,32 @@ describe("runWatchOnce", () => {
 		const health = store.readHealth();
 		expect(health.boom?.consecutiveFailures).toBe(6);
 		expect(health.boom?.lastAlertedAt).toBeDefined();
+	});
+
+	test("health: HttpError由来のlastErrorはredactUrl(根本対策)で秘密が伏せられている", async () => {
+		const store = new Store(mkdtempSync(join(tmpdir(), "tfw-")));
+		const secretUrl =
+			"https://serpapi.com/search.json?engine=google_flights&api_key=SUPERSECRET123";
+		const boom = {
+			name: "boom",
+			available: () => true,
+			sweep: async () => {
+				throw new HttpError(401, secretUrl, "unauthorized");
+			},
+		};
+		const r = await runWatchOnce({
+			cfg,
+			store,
+			env: { isCI: true, hasBrowser: false, now },
+			sources: [boom] as never,
+			rss: rssEmpty,
+		});
+		expect(r.errors.length).toBeGreaterThan(0);
+		expect(r.errors.some((e) => e.includes("SUPERSECRET123"))).toBe(false);
+		const health = store.readHealth();
+		expect(health.boom?.lastError).toBeDefined();
+		expect(health.boom?.lastError).not.toContain("SUPERSECRET123");
+		expect(health.boom?.lastError).toContain("***");
 	});
 
 	test("notifier未指定(非dryRun)ではappendNotifiedされない(I6)", async () => {

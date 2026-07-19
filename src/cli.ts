@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
-import type { ArgsDef } from "citty";
-import { defineCommand, runMain } from "citty";
+import type { ArgsDef, CommandDef } from "citty";
+import { defineCommand, renderUsage, runMain } from "citty";
 import { type Config, loadConfig, maskedConfig } from "./config";
 import { buildPairs, marketOf, runWatchOnce } from "./core/pipeline";
 import { DiscordNotifier } from "./notify/discord";
@@ -45,8 +45,33 @@ function globalFlags(args: {
 	};
 }
 
+// setup()内で読み込んだConfig.secretsを保持する(コマンドごとに新規プロセスなので実質
+// 「今回の実行のcfg.secrets」)。setup()より前にfail()する経路(FROM/TO/DATE必須チェック等)では
+// 未設定のままだが、そちら側のメッセージは元々秘密を含まない静的文言のみ。
+let activeSecrets: Config["secrets"] | undefined;
+
+// cfg.secretsの非空な値をtextから探し、出現箇所を全て"***"に置換する。http.tsのredactUrl
+// (URL構造を前提にクエリ値/webhookトークンを伏せる根本対策)に対する多重防御 —Discord webhook
+// のようにURL全体が秘密になるケースや、http.tsを経由しない将来のエラーメッセージにも効く、
+// このCLIにとっての最後の網。
+export function redactSecrets(
+	text: string,
+	secrets: Config["secrets"],
+): string {
+	let out = text;
+	for (const value of Object.values(secrets)) {
+		if (value) out = out.split(value).join("***");
+	}
+	return out;
+}
+
+// このCLIが出すエラー文字列は必ずこれを通す(activeSecrets未設定時は素通し)。
+function redact(text: string): string {
+	return activeSecrets ? redactSecrets(text, activeSecrets) : text;
+}
+
 function errMsg(err: unknown): string {
-	return err instanceof Error ? err.message : String(err);
+	return redact(err instanceof Error ? err.message : String(err));
 }
 
 // 想定内の失敗(webhook未設定・引数不足・能力ゼロ等)を運ぶ専用エラー。
@@ -68,7 +93,7 @@ function fail(message: string, exitCode = 1): never {
 // 既に"cmd: "接頭辞を含めている)。それ以外の想定外例外は"cmd: "を前置してexit 1にする。
 function handleFailure(name: string, err: unknown): void {
 	if (err instanceof CliFailure) {
-		process.stderr.write(`${err.message}\n`);
+		process.stderr.write(`${redact(err.message)}\n`);
 		process.exitCode = err.exitCode;
 		return;
 	}
@@ -84,6 +109,9 @@ function setup(configPath: string | undefined): {
 	env: RunnerEnv;
 } {
 	const cfg = loadConfig({ path: configPath, env: process.env });
+	// 以降このプロセス内のerrMsg/handleFailure/redact呼び出し全てが、実際に読み込んだ秘密の値を
+	// マスク対象にできるようにする(defense-in-depth。根本対策はhttp.tsのredactUrl)。
+	activeSecrets = cfg.secrets;
 	const store = new Store(process.env.TFW_DATA_DIR ?? "data");
 	const env: RunnerEnv = {
 		isCI: !!process.env.CI,
@@ -148,15 +176,19 @@ const watchCmd = defineCommand({
 					"watch: continuous mode is not implemented yet; ran once (equivalent to --once). Use `tfw setup-local`/cron/launchd to repeat.\n",
 				);
 			}
+			// result.errorsはpipeline.ts側で組み立てられた文字列で、このモジュールのerrMsgを経由
+			// していないため、stdout/stderrへ出す直前にここで明示的にredact()を通す
+			// (--jsonのstdoutにも秘密を絶対に出さないための多重防御)。
+			const safeErrors = result.errors.map((e) => redact(e));
 			if (json) {
-				console.log(JSON.stringify(result));
+				console.log(JSON.stringify({ ...result, errors: safeErrors }));
 			} else {
 				console.log(`jobs run: ${result.jobsRun.length}`);
 				for (const id of result.jobsRun) console.log(`  - ${id}`);
 				console.log(`observations: ${result.observations}`);
 				console.log(`notified: ${result.notified}`);
-				console.log(`errors: ${result.errors.length}`);
-				for (const e of result.errors) console.log(`  - ${e}`);
+				console.log(`errors: ${safeErrors.length}`);
+				for (const e of safeErrors) console.log(`  - ${e}`);
 			}
 			process.exitCode = result.errors.length > 0 ? 2 : 0;
 		} catch (err) {
@@ -212,7 +244,7 @@ const sweepCmd = defineCommand({
 			} else {
 				console.table(observations);
 			}
-			for (const e of errors) process.stderr.write(`sweep: ${e}\n`);
+			for (const e of errors) process.stderr.write(`sweep: ${redact(e)}\n`);
 			process.exitCode = errors.length > 0 ? 2 : 0;
 		} catch (err) {
 			handleFailure("sweep", err);
@@ -381,15 +413,23 @@ const newsCmd = defineCommand({
 	meta: { name: "news", description: "RSSセール速報の直近マッチ一覧" },
 	args: { ...GLOBAL_ARGS },
 	async run({ args }) {
-		const { json } = globalFlags(args);
-		// state.rssSeenは既読guidの集合のみを保持し、タイトル/URL等の本文は保存しない(store.ts参照)。
-		// そのため復元可能なニュースは常に0件 —"追跡できていない"旨をstderrにのみ書き、
-		// stdoutは(--json時に)常に純粋な{news:[]}のみにする。
-		process.stderr.write(
-			"news: state only retains RSS guids (not titles/bodies), so nothing can be listed here yet.\n",
-		);
-		console.log(json ? JSON.stringify({ news: [] }) : "news: (0 tracked)");
-		process.exitCode = 0;
+		const { json, config } = globalFlags(args);
+		try {
+			// --configを他コマンドと同様に一貫して尊重するため、setup()を呼ぶ(以前は無条件に
+			// 既定値のみを見ており--configを黙って無視していた)。news自体はcfg/store/envを
+			// 使わないため戻り値は捨てる。
+			setup(config);
+			// state.rssSeenは既読guidの集合のみを保持し、タイトル/URL等の本文は保存しない(store.ts参照)。
+			// そのため復元可能なニュースは常に0件 —"追跡できていない"旨をstderrにのみ書き、
+			// stdoutは(--json時に)常に純粋な{news:[]}のみにする。
+			process.stderr.write(
+				"news: state only retains RSS guids (not titles/bodies), so nothing can be listed here yet.\n",
+			);
+			console.log(json ? JSON.stringify({ news: [] }) : "news: (0 tracked)");
+			process.exitCode = 0;
+		} catch (err) {
+			handleFailure("news", err);
+		}
 	},
 });
 
@@ -500,4 +540,25 @@ const main = defineCommand({
 	},
 });
 
-await runMain(main);
+// citty既定のshowUsageはUSAGE本文をconsole.log(...)でSTDOUTへ書く。未知サブコマンド等の
+// CLIError発生時にrunMainがこれを呼ぶため、既定のままだと`tfw bogus --json`のようなagent向け
+// 呼び出しでも整形済みUSAGE本文がSTDOUTへ混ざってしまう(--jsonのstdout純度契約に反する)。
+// runMainのshowUsage差し替えフックを使い、USAGE本文を必ずSTDERRへ書くようにする —
+// これで--help時もエラー時もSTDOUTは実行結果専用のまま保たれる。
+async function showUsageOnStderr<T extends ArgsDef = ArgsDef>(
+	cmd: CommandDef<T>,
+	parent?: CommandDef<T>,
+): Promise<void> {
+	try {
+		process.stderr.write(`${await renderUsage(cmd, parent)}\n`);
+	} catch (err) {
+		process.stderr.write(`${errMsg(err)}\n`);
+	}
+}
+
+// import.meta.mainガード: このファイルが直接実行された(`bun run src/cli.ts ...`/`tfw`bin)場合
+// のみCLIを起動する。テストからexport(redactSecrets等)をimportするだけではCLIが起動しない
+// ようにするため(importするだけでprocess.argvをコマンドとして解釈・実行してしまうと事故る)。
+if (import.meta.main) {
+	await runMain(main, { showUsage: showUsageOnStderr });
+}

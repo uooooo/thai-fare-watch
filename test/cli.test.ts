@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { redactSecrets } from "../src/cli";
 import { Store } from "../src/state/store";
 import type { FareObservation, Itinerary } from "../src/types";
 import { todayJst } from "../src/util/dates";
@@ -174,5 +175,75 @@ describe("tfw CLI", () => {
 		expect(r.exitCode).toBe(0);
 		expect(JSON.parse(r.stdout).errors).toEqual([]);
 		expect(r.stderr.length).toBeGreaterThan(0);
+	});
+
+	// --- セキュリティ修正(Task 14 fix report): 秘密漏洩の遮断と--json純度 -------------------
+
+	test("未知のサブコマンドはexit 1、stdoutは空でUSAGE/エラーはstderrへ(--json有無に関わらず)", async () => {
+		const bare = await run(["definitely-not-a-command"]);
+		expect(bare.exitCode).toBe(1);
+		expect(bare.stdout).toBe("");
+		expect(bare.stderr.length).toBeGreaterThan(0);
+
+		const withJson = await run(["definitely-not-a-command", "--json"]);
+		expect(withJson.exitCode).toBe(1);
+		expect(withJson.stdout).toBe("");
+		expect(withJson.stderr.length).toBeGreaterThan(0);
+	});
+
+	test("newsは--configを尊重する(不正な設定パスは以前は無視されていたがエラーになる)", async () => {
+		const r = await run([
+			"news",
+			"--json",
+			"--config",
+			"test/fixtures/bad-config.toml",
+		]);
+		expect(r.exitCode).toBe(1);
+		expect(r.stdout).toBe("");
+		expect(r.stderr.length).toBeGreaterThan(0);
+	});
+
+	test("notify-test: webhookの401失敗でも秘密トークンはstdout/stderrに一切出ない(実HTTP失敗の回帰テスト)", async () => {
+		const secretToken = "LOCALSECRETTOKEN999";
+		const server = Bun.serve({
+			port: 0,
+			fetch() {
+				return new Response("unauthorized", { status: 401 });
+			},
+		});
+		try {
+			const webhook = `http://127.0.0.1:${server.port}/api/webhooks/123456/${secretToken}`;
+			const r = await run(["notify-test", "--json"], {
+				DISCORD_WEBHOOK_URL: webhook,
+			});
+			expect(r.exitCode).toBe(1);
+			expect(r.stdout).not.toContain(secretToken);
+			expect(r.stderr).not.toContain(secretToken);
+			expect(r.stderr).toContain("***");
+		} finally {
+			server.stop(true);
+		}
+	});
+});
+
+describe("redactSecrets", () => {
+	test("discordWebhookUrl/travelpayoutsToken/serpapiKeyの3種すべてを伏せる", () => {
+		const secrets = {
+			discordWebhookUrl: "https://discord.com/api/webhooks/1/WEBHOOKSECRET",
+			travelpayoutsToken: "tp-secret-value",
+			serpapiKey: "serp-secret-value",
+		};
+		const text = `failed calling ${secrets.discordWebhookUrl} token=${secrets.travelpayoutsToken} key=${secrets.serpapiKey}`;
+		const out = redactSecrets(text, secrets);
+		expect(out).not.toContain("WEBHOOKSECRET");
+		expect(out).not.toContain("tp-secret-value");
+		expect(out).not.toContain("serp-secret-value");
+		expect(out).toContain("***");
+	});
+	test("未設定/空文字の秘密は無視して素通しする(過剰マスクしない)", () => {
+		const out = redactSecrets("hello world", {});
+		expect(out).toBe("hello world");
+		const out2 = redactSecrets("hello world", { serpapiKey: "" });
+		expect(out2).toBe("hello world");
 	});
 });
