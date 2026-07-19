@@ -28,6 +28,19 @@ function normalizedIncludesEitherWay(a: string, b: string): boolean {
 	return normalizedIncludes(a, b) || normalizedIncludes(b, a);
 }
 
+// 正規化済みの販売元名がOTA allowlistエントリと「完全一致」または「前方一致」するかの判定。
+// 信頼フィルタは偽陽性（untrustedなOTAをtrusted扱いしてしまう）が致命的・偽陰性
+// （trustedなOTAを見逃してreference扱いになる）は安全側、という非対称性があるため、
+// 任意位置の部分一致(contains)ではなく前方一致に限定する。
+// 例: "Trip.com (Japan)" → "tripcomjapan" は "tripcom" の前方一致でOK（trusted_ota）。
+//     "Mytrip.com" → "mytripcom" は "tripcom" を含むが前方一致ではないためNG（reference）。
+// GUARD: どちらかが空文字なら常にfalse。ガード無しだと"".startsWith("")===trueとなり、
+// allowlistエントリがCJKのみ（正規化後に空文字）の場合に無条件でマッチしてしまう。
+function normalizedMatchesOta(seller: string, ota: string): boolean {
+	if (seller === "" || ota === "") return false;
+	return seller === ota || seller.startsWith(ota);
+}
+
 export function classifySeller(
 	input: {
 		seller: string;
@@ -47,9 +60,10 @@ export function classifySeller(
 		return "airline";
 	}
 
-	// 3. 信頼済みOTA allowlistのいずれかが販売元名に含まれればtrusted_ota。
+	// 3. 信頼済みOTA allowlistのいずれかと完全一致または前方一致すればtrusted_ota。
+	//    （contains全般は採用しない。詳細はnormalizedMatchesOtaのコメント参照）
 	const otas = trustedOtas.map(normalizeSeller);
-	if (otas.some((ota) => normalizedIncludes(seller, ota))) {
+	if (otas.some((ota) => normalizedMatchesOta(seller, ota))) {
 		return "trusted_ota";
 	}
 

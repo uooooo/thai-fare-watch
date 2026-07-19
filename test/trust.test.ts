@@ -62,6 +62,29 @@ describe("classifySeller", () => {
 			),
 		).toBe("reference");
 	});
+
+	test("類似名OTAは信頼されない（Mytrip.com ⊅ trip.com）", () => {
+		expect(
+			classifySeller({ seller: "Mytrip.com", legAirlines: [] }, trusted),
+		).toBe("reference");
+		expect(
+			classifySeller({ seller: "eBooking.com", legAirlines: [] }, trusted),
+		).toBe("reference");
+		expect(
+			classifySeller({ seller: "gotogate-trip.com", legAirlines: [] }, trusted),
+		).toBe("reference");
+	});
+	test("前方一致の表記ゆれは信頼される", () => {
+		expect(
+			classifySeller({ seller: "Trip.com (Japan)", legAirlines: [] }, trusted),
+		).toBe("trusted_ota");
+		expect(
+			classifySeller(
+				{ seller: "Booking.com フライト", legAirlines: [] },
+				trusted,
+			),
+		).toBe("trusted_ota");
+	});
 });
 
 // 追加テスト(b): applyTrust + bestTrustedSellerのend-to-end。
