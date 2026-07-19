@@ -1,4 +1,8 @@
 #!/usr/bin/env bun
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 import type { ArgsDef, CommandDef } from "citty";
 import { defineCommand, renderUsage, runMain } from "citty";
 import { type Config, loadConfig, maskedConfig } from "./config";
@@ -512,16 +516,131 @@ const configCmd = defineCommand({
 	},
 });
 
+// launchdのLabel。plistファイル名(~/Library/LaunchAgents/<LABEL>.plist)にも使う。
+const LAUNCHD_LABEL = "tech.incerto.tfw";
+// watch-and-syncを30分毎に起動する(spec/T16のStartInterval、秒単位)。
+const LAUNCHD_INTERVAL_SEC = 1800;
+
+// launchd plist本文を組み立てる純関数(副作用なし)。setup-local(--dry-run含む)から呼ぶ。
+// bunPathはEnvironmentVariables.PATHへ反映する—watch-and-sync.sh自身もPATHへbunを通すため
+// 実行上は冗長防御だが、launchdはデフォルトで最小限のPATHしか渡さないため二重に効かせておく。
+export function renderPlist(opts: {
+	bunPath: string;
+	repoDir: string;
+	logDir: string;
+}): string {
+	const scriptPath = join(opts.repoDir, "scripts", "watch-and-sync.sh");
+	const logPath = join(opts.logDir, "tfw.log");
+	const bunDir = dirname(opts.bunPath);
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>${LAUNCHD_LABEL}</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/bash</string>
+		<string>${scriptPath}</string>
+	</array>
+	<key>StartInterval</key>
+	<integer>${LAUNCHD_INTERVAL_SEC}</integer>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardOutPath</key>
+	<string>${logPath}</string>
+	<key>StandardErrorPath</key>
+	<string>${logPath}</string>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PATH</key>
+		<string>${bunDir}:/opt/homebrew/bin:/usr/bin:/bin</string>
+	</dict>
+</dict>
+</plist>
+`;
+}
+
 const setupLocalCmd = defineCommand({
 	meta: {
 		name: "setup-local",
 		description: "launchd plist生成+ロード（30分毎実行、ログパス設定込み）",
 	},
-	args: { ...GLOBAL_ARGS },
-	async run() {
-		// Task 16で実装する。ここではプレースホルダのみ。
-		process.stderr.write("setup-local: Task 16で有効化\n");
-		process.exitCode = 1;
+	args: {
+		uninstall: {
+			type: "boolean",
+			description:
+				"launchd登録を解除しplistを削除する（--dry-runとは併用不可）",
+		},
+		...GLOBAL_ARGS,
+	},
+	async run({ args }) {
+		const { dryRun } = globalFlags(args);
+		// process.getuidはPOSIX限定(Windowsはundefined)。launchdはmacOS専有機能なので、
+		// 万一undefinedでも例外にせずtsc上だけ安全に倒す(実行時はmacOS前提で必ず値が入る)。
+		const domain = `gui/${process.getuid?.() ?? 0}`;
+		const plistPath = join(
+			homedir(),
+			"Library",
+			"LaunchAgents",
+			`${LAUNCHD_LABEL}.plist`,
+		);
+		try {
+			if (args.uninstall) {
+				if (dryRun) {
+					// --dry-run --uninstallもfs/launchctlに一切触れない(表示のみ、通常のdry-runと同じ契約)。
+					console.log(
+						`(dry-run) launchctl bootout ${domain} ${plistPath} && rm ${plistPath}`,
+					);
+					process.exitCode = 0;
+					return;
+				}
+				try {
+					execFileSync("launchctl", ["bootout", domain, plistPath], {
+						stdio: "ignore",
+					});
+				} catch {
+					// 既に未登録(bootout失敗)でも、plist削除は続行する(冪等)。
+				}
+				if (existsSync(plistPath)) rmSync(plistPath);
+				console.log(`ok: launchd登録を解除しました (${plistPath})`);
+				process.exitCode = 0;
+				return;
+			}
+
+			const bunPath = process.execPath;
+			// import.meta.dirは常に"<repoDir>/src"(このファイルの場所)なので、そこから1段上る。
+			const repoDir = dirname(import.meta.dir);
+			const logDir =
+				process.env.TFW_LOG_DIR ?? join(homedir(), "Library", "Logs", "tfw");
+			const plist = renderPlist({ bunPath, repoDir, logDir });
+
+			if (dryRun) {
+				// --dry-runはファイルシステム(plist書き込み・ログディレクトリ作成・launchctl呼び出し)
+				// に一切触れず、生成結果をstdoutへ出すだけにする(spec通り「表示のみ」)。
+				console.log(plist);
+				process.exitCode = 0;
+				return;
+			}
+
+			mkdirSync(logDir, { recursive: true });
+			mkdirSync(dirname(plistPath), { recursive: true });
+			writeFileSync(plistPath, plist);
+			// 既に登録済みの場合のbootstrap再実行はエラーになりうるため、先にbootout(失敗は無視)
+			// してから改めてbootstrapする—setup-localを再実行しても安全な冪等操作にする。
+			try {
+				execFileSync("launchctl", ["bootout", domain, plistPath], {
+					stdio: "ignore",
+				});
+			} catch {
+				// 未登録だった場合は失敗して当然なので無視する。
+			}
+			execFileSync("launchctl", ["bootstrap", domain, plistPath]);
+			console.log(`ok: launchd登録しました (${plistPath})`);
+			process.exitCode = 0;
+		} catch (err) {
+			handleFailure("setup-local", err);
+		}
 	},
 });
 

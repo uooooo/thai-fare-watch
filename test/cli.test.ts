@@ -57,12 +57,6 @@ describe("tfw CLI", () => {
 
 	// --- 以下、brief記載の4テストに加えて追加した回帰テスト（すべて外部APIに触れない） ---
 
-	test("setup-localはTask 16未実装のプレースホルダとして終了コード1", async () => {
-		const r = await run(["setup-local"]);
-		expect(r.exitCode).toBe(1);
-		expect(r.stderr).toContain("Task 16");
-	});
-
 	test("newsはstateが本文を保持しないため常に空配列", async () => {
 		const r = await run(["news", "--json"]);
 		expect(r.exitCode).toBe(0);
