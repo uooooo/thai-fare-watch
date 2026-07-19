@@ -15,6 +15,7 @@ import type {
 	VerifiedOffer,
 } from "./types";
 import { windowToRange } from "./util/dates";
+import { safeErrorMessage } from "./util/http";
 
 // 全サブコマンド共通のflag。post-subcommand（`tfw <cmd> [--json ...]`）順で渡すことを前提にする
 // —citty はサブコマンド名より前のflagをそのサブコマンドへ引き渡さないため、コマンド表(spec 6.11)
@@ -70,8 +71,11 @@ function redact(text: string): string {
 	return activeSecrets ? redactSecrets(text, activeSecrets) : text;
 }
 
+// safeErrorMessage(http.ts)で生Error/HttpErrorのいずれでも秘密URLを構造的にscrub/redact
+// した上で、既存のredactSecrets(cfg.secretsの生値と完全一致するリテラル)を多重防御として
+// さらに適用する。根本対策(safeErrorMessage)→CLI固有の網(redact)の順で必ず両方通す。
 function errMsg(err: unknown): string {
-	return redact(err instanceof Error ? err.message : String(err));
+	return redact(safeErrorMessage(err));
 }
 
 // 想定内の失敗(webhook未設定・引数不足・能力ゼロ等)を運ぶ専用エラー。

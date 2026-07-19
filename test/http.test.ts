@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { fetchJson, HttpError, redactUrl } from "../src/util/http";
+import {
+	fetchJson,
+	HttpError,
+	redactUrl,
+	safeErrorMessage,
+	scrubUrls,
+} from "../src/util/http";
 
 function jsonResponse(body: unknown, status = 200): Response {
 	return new Response(JSON.stringify(body), {
@@ -133,5 +139,57 @@ describe("HttpError", () => {
 		expect(err.message).not.toContain("leaked-secret-body");
 		expect(err.message).toBe("HTTP 500 for https://example.com/x");
 		expect(err.body).toBe("leaked-secret-body");
+	});
+});
+
+describe("scrubUrls", () => {
+	test("地の文に埋め込まれた秘密付きURLを伏せる(prose内のURL)", () => {
+		const text =
+			"failed calling https://api.travelpayouts.com/aviasales/v3/prices_for_dates?origin=TYO&token=PROSESECRET1 aborted after 3 retries";
+		const out = scrubUrls(text);
+		expect(out).not.toContain("PROSESECRET1");
+		expect(out).toContain("***");
+		expect(out).toContain("aborted after 3 retries"); // 秘密以外の地の文は保持
+	});
+	test("URLを含まない文字列はそのまま返す(過剰マスクしない)", () => {
+		expect(scrubUrls("plain message, no url here")).toBe(
+			"plain message, no url here",
+		);
+	});
+});
+
+describe("safeErrorMessage", () => {
+	test("HttpErrorは.messageのみ(既にredact済み・bodyを含まない)を返す", () => {
+		const err = new HttpError(
+			500,
+			"https://x.example/?token=HTTPERRSECRET1",
+			"body-secret-HTTPERRSECRET2",
+		);
+		const out = safeErrorMessage(err);
+		expect(out).toBe(err.message);
+		expect(out).not.toContain("HTTPERRSECRET1");
+		expect(out).not.toContain("HTTPERRSECRET2"); // body由来の秘密は最初から.messageに無い
+	});
+	test("秘密付きURLがmessageに直接埋め込まれた通常Errorはscrubされる", () => {
+		const err = new Error(
+			"fetch failed for https://api.travelpayouts.com/x?token=PLAINERRSECRET1",
+		);
+		const out = safeErrorMessage(err);
+		expect(out).not.toContain("PLAINERRSECRET1");
+		expect(out).toContain("***");
+	});
+	test(".pathに秘密URLがあっても.messageしか読まないため含まれない", () => {
+		const err = new Error("Unable to connect");
+		(err as unknown as { path: string }).path =
+			"http://x/aviasales?token=PATHONLYSECRET1";
+		const out = safeErrorMessage(err);
+		expect(out).toBe("Unable to connect");
+		expect(out).not.toContain("PATHONLYSECRET1");
+	});
+	test("Errorでない値も文字列化した上でscrubする", () => {
+		expect(safeErrorMessage(42)).toBe("42");
+		expect(
+			safeErrorMessage("boom https://x.example/?token=NONERRSECRET1"),
+		).not.toContain("NONERRSECRET1");
 	});
 });

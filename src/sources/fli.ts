@@ -7,6 +7,7 @@ import type {
 	VerifiedOffer,
 } from "../types";
 import { stableId } from "../util/hash";
+import { safeErrorMessage } from "../util/http";
 import type { FareSource, RunnerEnv } from "./types";
 
 // ---- 確定したCLI契約 (Step 1: punitarani/fli, README + 実uvx検証) --------------
@@ -199,9 +200,10 @@ export class FliSource implements FareSource {
 				anySucceeded = true;
 			} catch (err) {
 				lastErr = err;
+				// 生Errorオブジェクトを渡さない —enumerableプロパティをconsoleが展開して
+				// 漏らす経路を構造的に断つため、必ず文字列化してから渡す(http.ts参照)。
 				console.warn(
-					`fli: sweep failed for ${pair.origin}->${pair.destination}`,
-					err,
+					`fli: sweep failed for ${pair.origin}->${pair.destination}: ${safeErrorMessage(err)}`,
 				);
 			}
 		}

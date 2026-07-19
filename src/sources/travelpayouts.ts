@@ -2,7 +2,7 @@ import type { Config } from "../config";
 import type { DateRange, FareObservation, OdPair } from "../types";
 import { monthsTouched } from "../util/dates";
 import { stableId } from "../util/hash";
-import { fetchJson } from "../util/http";
+import { fetchJson, safeErrorMessage } from "../util/http";
 import type { FareSource, RunnerEnv } from "./types";
 
 const ENDPOINT = "https://api.travelpayouts.com/aviasales/v3/prices_for_dates";
@@ -124,9 +124,10 @@ export class TravelpayoutsSource implements FareSource {
 						}
 					}
 				} catch (err) {
+					// 生Errorオブジェクトを渡さない —ネットワークエラーのenumerableな.path
+					// (秘密含む生URL)をconsoleが展開して漏らすため、必ず文字列化してから渡す。
 					console.warn(
-						`travelpayouts: sweep failed for ${pair.origin}->${pair.destination} (${month})`,
-						err,
+						`travelpayouts: sweep failed for ${pair.origin}->${pair.destination} (${month}): ${safeErrorMessage(err)}`,
 					);
 				}
 				await sleep(150);

@@ -16,6 +16,7 @@ import type {
 	SourceHealth,
 } from "../types";
 import { todayJst, windowToRange } from "../util/dates";
+import { safeErrorMessage } from "../util/http";
 import { combine } from "./combiner";
 import { assignTier, dealKey, expireDeals, shouldNotify } from "./dedupe";
 import { verifyItinerary } from "./verify";
@@ -63,8 +64,11 @@ export function buildPairs(cfg: Config): OdPair[] {
 	return pairs;
 }
 
+// RunResult.errors及びrecordHealthFailure→data/health.json(公開リポジトリにcommitされる)
+// の両方が最終的にこれを経由する。safeErrorMessageで多重防御する(HttpError由来なら
+// 根本対策で既にredact済み、生Errorでも.messageのみを読み秘密URLをscrubする)。
 function errMsg(err: unknown): string {
-	return err instanceof Error ? err.message : String(err);
+	return safeErrorMessage(err);
 }
 
 const VERIFY_BATCH_MAX = 5;

@@ -35,6 +35,12 @@ export function redactUrl(raw: string): string {
 	return u.toString();
 }
 
+// URL中のクエリ秘密だけでなく、地の文(生Errorの.message等)に丸ごと埋め込まれたURLも
+// 伏せる汎用ヘルパー。文字列中に現れる全てのhttp(s) URLをredactUrlで個別に伏せる。
+export function scrubUrls(text: string): string {
+	return text.replace(/https?:\/\/[^\s"'`<>]+/g, (m) => redactUrl(m));
+}
+
 export class HttpError extends Error {
 	public status: number;
 	public url: string;
@@ -52,6 +58,14 @@ export class HttpError extends Error {
 		this.url = redactUrl(url);
 		this.body = body;
 	}
+}
+
+// 生のError objectを渡すとBunの network error が enumerable な `.path`(生URL=秘密) を持ち、
+// console が展開して漏らす。必ず safeErrorMessage で **文字列** に変換してからログする。
+export function safeErrorMessage(err: unknown): string {
+	if (err instanceof HttpError) return err.message; // 既にredact済み・bodyを含まない
+	if (err instanceof Error) return scrubUrls(err.message); // .path/.stack/オブジェクトは決して触らない
+	return scrubUrls(String(err));
 }
 
 type FetchOptions = RequestInit & {

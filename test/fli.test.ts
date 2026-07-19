@@ -68,6 +68,30 @@ const mkBreaker = () => {
 };
 const tmpStore = () => new Store(mkdtempSync(join(tmpdir(), "tfw-fli-")));
 
+// console.warnをスパイして実際に出力される全引数を捕捉する(travelpayouts.test.tsと同じ手法)。
+// 非文字列引数はBun.inspectで展開してから連結し、生Errorオブジェクトを渡した場合に
+// enumerableプロパティが漏れることを検出できるようにする。
+function captureWarn(): { text: () => string; restore: () => void } {
+	const calls: unknown[][] = [];
+	const original = console.warn;
+	console.warn = ((...args: unknown[]) => {
+		calls.push(args);
+	}) as typeof console.warn;
+	return {
+		text: () =>
+			calls
+				.map((args) =>
+					args
+						.map((a) => (typeof a === "string" ? a : Bun.inspect(a)))
+						.join(" "),
+				)
+				.join("\n"),
+		restore: () => {
+			console.warn = original;
+		},
+	};
+}
+
 describe("FliSource.verify", () => {
 	test("確定したFLI_ARGSでrunを呼ぶ（片道/JPY/JP-POS/JSON）", async () => {
 		let captured: string[] = [];
@@ -297,6 +321,27 @@ describe("FliSource.sweep", () => {
 		const s = new FliSource(cfg, { run: datesRun, breaker: mkBreaker() });
 		const got = await s.sweep([jp], { from: "2026-08-01", to: "2026-08-07" });
 		expect(got.map((o) => o.priceJpy)).toEqual([31742, 33675, 36575]);
+	});
+
+	// --- セキュリティ修正(Task 14 fix report 2): 生Errorオブジェクトのログ経由の秘密漏洩 ---
+	test("run()がenumerableな秘密プロパティを持つErrorをthrowしてもconsole.warnの出力に秘密が出ない", async () => {
+		const run = async () => {
+			const e = new Error("spawn failed");
+			(e as unknown as { path: string }).path =
+				"uvx://fli?token=FLISWEEPSECRET1";
+			throw e;
+		};
+		const s = new FliSource(cfg, { run, breaker: mkBreaker() });
+		const warn = captureWarn();
+		try {
+			// 全滅時の集約throwはこのテストの関心外(console.warn出力のみ検証する)。
+			await s
+				.sweep([jp], { from: "2026-08-01", to: "2026-08-07" })
+				.catch(() => {});
+		} finally {
+			warn.restore();
+		}
+		expect(warn.text()).not.toContain("FLISWEEPSECRET1");
 	});
 });
 

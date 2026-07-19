@@ -279,6 +279,33 @@ describe("runWatchOnce", () => {
 		expect(health.boom?.lastError).toContain("***");
 	});
 
+	// --- セキュリティ修正(Task 14 fix report 2): 生Errorオブジェクトのログ経由の秘密漏洩 ---
+	test("health: 生Error(非HttpError)のmessage内URL秘密もsafeErrorMessage経由で伏せられる(多重防御)", async () => {
+		const store = new Store(mkdtempSync(join(tmpdir(), "tfw-")));
+		const secretUrl =
+			"https://api.travelpayouts.com/aviasales/v3/prices_for_dates?token=RAWHEALTHSECRET1";
+		const boom = {
+			name: "boom",
+			available: () => true,
+			sweep: async () => {
+				throw new Error(`network fail: ${secretUrl}`);
+			},
+		};
+		const r = await runWatchOnce({
+			cfg,
+			store,
+			env: { isCI: true, hasBrowser: false, now },
+			sources: [boom] as never,
+			rss: rssEmpty,
+		});
+		expect(r.errors.length).toBeGreaterThan(0);
+		expect(r.errors.some((e) => e.includes("RAWHEALTHSECRET1"))).toBe(false);
+		const health = store.readHealth();
+		expect(health.boom?.lastError).toBeDefined();
+		expect(health.boom?.lastError).not.toContain("RAWHEALTHSECRET1");
+		expect(health.boom?.lastError).toContain("***");
+	});
+
 	test("notifier未指定(非dryRun)ではappendNotifiedされない(I6)", async () => {
 		const store = new Store(mkdtempSync(join(tmpdir(), "tfw-")));
 		const r = await runWatchOnce({
