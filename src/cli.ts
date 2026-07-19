@@ -570,7 +570,7 @@ const setupLocalCmd = defineCommand({
 		uninstall: {
 			type: "boolean",
 			description:
-				"launchd登録を解除しplistを削除する（--dry-runとは併用不可）",
+				"launchd登録を解除しplistを削除する（--dry-runと併用すると解除内容の確認のみ）",
 		},
 		...GLOBAL_ARGS,
 	},
