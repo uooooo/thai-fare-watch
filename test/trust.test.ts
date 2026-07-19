@@ -74,16 +74,58 @@ describe("classifySeller", () => {
 			classifySeller({ seller: "gotogate-trip.com", legAirlines: [] }, trusted),
 		).toBe("reference");
 	});
-	test("前方一致の表記ゆれは信頼される", () => {
+	// ラテン接尾辞は設定で明示追加が必要。"Trip.com (Japan)"は正規化後"tripcomjapan"と
+	// なり"tripcom"と完全一致しないためreferenceに転ぶ（安全側）。一方"Booking.com フライト"は
+	// CJK部分（フライト）が正規化で消えるため"bookingcom"と完全一致し、trusted_otaのまま。
+	test("ラテン接尾辞は設定で明示追加が必要（CJK装飾は正規化で消えるため信頼されたまま）", () => {
 		expect(
 			classifySeller({ seller: "Trip.com (Japan)", legAirlines: [] }, trusted),
-		).toBe("trusted_ota");
+		).toBe("reference");
 		expect(
 			classifySeller(
 				{ seller: "Booking.com フライト", legAirlines: [] },
 				trusted,
 			),
 		).toBe("trusted_ota");
+	});
+
+	// Finding(Critical): rule 2が包含判定だった当時、短い部分文字列のsellerが
+	// legAirlinesの一部にcontainsされることで無条件にairline誤判定されていた
+	// （例: seller "ZIP" ⊂ legAirlines "ZIPAIR"）。完全一致のみに厳格化したことの回帰テスト。
+	test("短い部分文字列では直販判定されない", () => {
+		for (const seller of ["ZIP", "Air", "Thai", "Z", "AIR"]) {
+			expect(
+				classifySeller(
+					{ seller, legAirlines: ["ZIPAIR", "Thai AirAsia X"] },
+					trusted,
+				),
+			).toBe("reference");
+		}
+	});
+
+	// Finding(Important): rule 3が前方一致(startsWith)判定だった当時、trusted OTA名を
+	// 前置しただけの別名（seller）がtrusted_otaに誤判定されていた
+	// （例: "trip.com.evil-agency" → 正規化後"tripcomevilagency"が"tripcom"の前方一致）。
+	// 完全一致のみに厳格化したことの回帰テスト。
+	test("trusted OTA名を前置した別名は信頼されない", () => {
+		expect(
+			classifySeller(
+				{ seller: "trip.com.evil-agency", legAirlines: [] },
+				trusted,
+			),
+		).toBe("reference");
+		expect(
+			classifySeller(
+				{ seller: "TripCom Travel Deals LLC", legAirlines: [] },
+				trusted,
+			),
+		).toBe("reference");
+		expect(
+			classifySeller(
+				{ seller: "Booking.com-scam-network", legAirlines: [] },
+				trusted,
+			),
+		).toBe("reference");
 	});
 });
 

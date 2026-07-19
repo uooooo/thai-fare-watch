@@ -16,29 +16,22 @@ export function normalizeSeller(name: string): string {
 	return noPrefix.replace(/[^a-z0-9]/g, "");
 }
 
-// 正規化済み文字列どうしの「包含」判定。どちらかが空文字なら常にfalseとする
-// GUARD: ガードなしだと"".includes("")===trueとなり、CJKのみの販売元名と
-// CJKのみの運航会社名が（内容と無関係に）無条件でairline一致してしまう。
-function normalizedIncludes(haystack: string, needle: string): boolean {
-	if (haystack === "" || needle === "") return false;
-	return haystack.includes(needle);
-}
-
-function normalizedIncludesEitherWay(a: string, b: string): boolean {
-	return normalizedIncludes(a, b) || normalizedIncludes(b, a);
-}
-
-// 正規化済みの販売元名がOTA allowlistエントリと「完全一致」または「前方一致」するかの判定。
-// 信頼フィルタは偽陽性（untrustedなOTAをtrusted扱いしてしまう）が致命的・偽陰性
-// （trustedなOTAを見逃してreference扱いになる）は安全側、という非対称性があるため、
-// 任意位置の部分一致(contains)ではなく前方一致に限定する。
-// 例: "Trip.com (Japan)" → "tripcomjapan" は "tripcom" の前方一致でOK（trusted_ota）。
-//     "Mytrip.com" → "mytripcom" は "tripcom" を含むが前方一致ではないためNG（reference）。
-// GUARD: どちらかが空文字なら常にfalse。ガード無しだと"".startsWith("")===trueとなり、
-// allowlistエントリがCJKのみ（正規化後に空文字）の場合に無条件でマッチしてしまう。
-function normalizedMatchesOta(seller: string, ota: string): boolean {
-	if (seller === "" || ota === "") return false;
-	return seller === ota || seller.startsWith(ota);
+// 正規化済み文字列どうしの「完全一致」判定。どちらかが空文字なら常にfalseとする。
+// GUARD: ガードなしだと"" === "" === trueとなり、CJKのみの販売元名がCJKのみの
+// 運航会社名/OTA名と（内容と無関係に）無条件で一致してしまう。
+//
+// 部分一致・前方一致は採用しない。過去に採用した際、いずれも実際のなりすまし経路として
+// 顕在化したため（Adversarial review findings）:
+// - 包含(contains)判定だった当時: seller "ZIP"/"Air"/"Thai"/"Z" が legAirlines
+//   "ZIPAIR"/"Thai AirAsia X" 側にcontainsされることでairlineに誤判定された
+//   （短い部分文字列でのなりすまし。この経路は全ルートで航空会社名が頻出するため危険度が高い）。
+// - 前方一致(startsWith)判定だった当時: seller "trip.com.evil-agency" が正規化後
+//   "tripcomevilagency"となり、trusted_ota "trip.com"（正規化後"tripcom"）の前方一致で
+//   trusted_otaに誤判定された（trusted OTA名を前置しただけの別名によるなりすまし）。
+// 完全一致のみにすることで、この2方向のなりすまし経路をどちらも遮断する。
+function normalizedEquals(a: string, b: string): boolean {
+	if (a === "" || b === "") return false;
+	return a === b;
 }
 
 export function classifySeller(
@@ -52,18 +45,25 @@ export function classifySeller(
 	// 1. ソース側のヒント（例: SerpAPIのairlineフラグ）を無条件で信用する。
 	if (input.isAirlineDirectHint === true) return "airline";
 
-	// 2. 販売元名を正規化し、運航会社名（leg）のいずれかと片方向包含すればairline。
-	//    （「Thai AirAsia Xで予約」⊇「Thai AirAsia X」のような表記揺れを吸収する）
+	// 2. 販売元名を正規化し、運航会社名（leg）のいずれかと完全一致すればairline。
+	//    normalizeSellerが「で予約/にて予約」接尾辞を剥がすため、「Thai AirAsia Xで予約」は
+	//    正規化後「Thai AirAsia X」と完全一致になる（=表記揺れの吸収はnormalizeSeller側の
+	//    責務であり、ここでの一致判定は完全一致のみ）。部分一致・前方一致は採用しない
+	//    （詳細はnormalizedEqualsのコメント参照）。
 	const seller = normalizeSeller(input.seller);
 	const legAirlines = input.legAirlines.map(normalizeSeller);
-	if (legAirlines.some((leg) => normalizedIncludesEitherWay(seller, leg))) {
+	if (legAirlines.some((leg) => normalizedEquals(seller, leg))) {
 		return "airline";
 	}
 
-	// 3. 信頼済みOTA allowlistのいずれかと完全一致または前方一致すればtrusted_ota。
-	//    （contains全般は採用しない。詳細はnormalizedMatchesOtaのコメント参照）
+	// 3. 信頼済みOTA allowlistのいずれかと完全一致すればtrusted_ota。
+	//    前方一致・部分一致は採用しない（詳細はnormalizedEqualsのコメント参照）。
+	//    CJKの装飾（例:「Trip.com（トリップ）」→"tripcom"）は正規化で消えるため完全一致の
+	//    まま信頼される。一方、ラテン文字の接尾辞（例: "Trip.com (Japan)"→"tripcomjapan"）は
+	//    完全一致にならずreference側に転ぶ。これは意図した安全側の挙動である。
+	//    ラテン表記ゆれはtrusted_otas設定に明示追加して対応する。
 	const otas = trustedOtas.map(normalizeSeller);
-	if (otas.some((ota) => normalizedMatchesOta(seller, ota))) {
+	if (otas.some((ota) => normalizedEquals(seller, ota))) {
 		return "trusted_ota";
 	}
 
@@ -71,6 +71,12 @@ export function classifySeller(
 	return "reference";
 }
 
+// ヒント(isAirlineDirect)はソース(SerpAPIのairlineフラグ等)由来の一次情報にのみ使うこと —
+// 再適用でtrustが粘着(ratchet)するため、applyTrustはソースから取得した直後のofferにのみ
+// 適用する。理由: classifySellerのrule 1はisAirlineDirectHintが真なら無条件でairlineを
+// 返す。一度trust==="airline"（=isAirlineDirect===true）になったofferを再度applyTrustに
+// 通すと、そのtrueな値がそのままヒントとして入力されrule 1で即決してしまい、
+// seller/legAirlinesの内容が変わってもairlineから剥がれなくなる。
 export function applyTrust(
 	offer: VerifiedOffer,
 	trustedOtas: string[],
