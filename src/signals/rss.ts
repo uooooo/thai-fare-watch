@@ -46,10 +46,27 @@ function isKatakanaContinuation(ch: string | undefined): boolean {
 // （・/文頭文末/漢字/ひらがな/ASCII/空白は境界としてOK）。1つの出現が境界NGでも
 // 別の出現が境界OKであれば含まれるとみなすため、indexOfループで全出現を確認する。
 // 3文字以上のカタカナ語（バンコク等）は「バンコクツアー」のような複合語も拾う必要が
-// あるため対象外とし、従来どおり単純な部分一致のままにする。
-function containsKeyword(title: string, kw: string): boolean {
+// あるため対象外とし、デフォルトでは従来どおり単純な部分一致のままにする。
+//
+// opts.alwaysBoundary=true を指定すると、上記「3文字超は無条件で部分一致」という
+// デフォルトを上書きし、キーワード長に関わらず常に同じ境界判定を適用する。
+// Rule B（airlines×context）の文脈語（アジア/国際線）はこちらを使う: 航空会社名が
+// それ自体の中に文脈語を部分文字列として含むケースがあり（例:「エアアジア」⊃「アジア」）、
+// 素朴な部分一致のままだと「エアアジア、機材トラブルで欠航」のような国際線セールとは
+// 無関係な見出しでも、自社名由来の「アジア」がヒットしてairlines×contextが両方成立し、
+// rule Bが実質無条件で真になってしまう（このFinding自体がその再現例）。
+// 境界判定を常時適用することで、航空会社名の内部に埋め込まれた文脈語（前後がカタカナ
+// 連続で境界NG）を除外し、独立した「アジア」「東南アジア」（前後がカタカナ以外で境界OK）
+// のみを文脈成立として認める。places/airlinesは従来どおりデフォルト（境界判定は
+// 2文字以下のみ）のままでよい—地名/航空会社名自体に他の地名/航空会社名を埋め込む
+// ケースは想定されていないため。
+function containsKeyword(
+	title: string,
+	kw: string,
+	opts?: { alwaysBoundary?: boolean },
+): boolean {
 	if (kw.length === 0) return false;
-	if (kw.length > 2) return title.includes(kw);
+	if (kw.length > 2 && !opts?.alwaysBoundary) return title.includes(kw);
 
 	const firstIsKatakana = isKatakanaContinuation(kw[0]);
 	const lastIsKatakana = isKatakanaContinuation(kw[kw.length - 1]);
@@ -69,8 +86,12 @@ function containsKeyword(title: string, kw: string): boolean {
 	}
 }
 
-function includesAny(title: string, words: string[]): string[] {
-	return words.filter((w) => containsKeyword(title, w));
+function includesAny(
+	title: string,
+	words: string[],
+	opts?: { alwaysBoundary?: boolean },
+): string[] {
+	return words.filter((w) => containsKeyword(title, w, opts));
 }
 
 // マッチしたキーワードを返す（空配列=不一致）。
@@ -90,7 +111,9 @@ export function matchSaleNews(
 	const ruleBContext = kw.context.filter(
 		(w) => !RULE_B_EXCLUDED_CONTEXT.has(w),
 	);
-	const context = includesAny(title, ruleBContext);
+	// alwaysBoundary: true — 文脈語は航空会社名に埋め込まれている可能性があるため
+	// （エアアジア⊃アジア）、長さに関わらず常に境界判定を課す（詳細はcontainsKeyword参照）。
+	const context = includesAny(title, ruleBContext, { alwaysBoundary: true });
 	if (context.length === 0) return [];
 
 	return [...airlines, ...context];

@@ -58,13 +58,27 @@ describe("matchSaleNews", () => {
 			matchSaleNews("ジェットスター、48時間タイムセール", cfg.rss_keywords),
 		).toEqual([]);
 	});
-	test("航空会社+国際線/アジアはrule Bでマッチする", () => {
+	test("航空会社+国際線はrule Bでマッチする", () => {
 		expect(
 			matchSaleNews("エアアジア、国際線で大規模セール", cfg.rss_keywords)
 				.length,
 		).toBeGreaterThan(0);
+	});
+	test("エアアジア自身の名前ではrule B文脈が成立しない", () => {
+		expect(matchSaleNews("エアアジア、国内線セール", cfg.rss_keywords)).toEqual(
+			[],
+		);
+		expect(
+			matchSaleNews("エアアジア、機材トラブルで欠航", cfg.rss_keywords),
+		).toEqual([]);
+	});
+	test("独立した「アジア」「東南アジア」は文脈として成立する", () => {
 		expect(
 			matchSaleNews("スクート、アジア路線セール", cfg.rss_keywords).length,
+		).toBeGreaterThan(0);
+		expect(
+			matchSaleNews("ジェットスター、東南アジア路線でセール", cfg.rss_keywords)
+				.length,
 		).toBeGreaterThan(0);
 	});
 });
