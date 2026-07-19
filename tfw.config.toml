@@ -42,6 +42,18 @@ enabled = true
 consecutive_failures = 3
 cooldown_hours = 6
 
+# Skyscanner(ローカル専用・best-effort)。PerimeterX等の対策が強いため頻繁に
+# skip/degradedになる想定。headless=falseは実チャネル+永続プロファイルでの
+# 温めたheadfulブラウザを前提とする。user_data_dir=""はsrc/sources/skyscanner/
+# 側で.skyscanner-profile/(gitignore対象)にフォールバックする。
+[skyscanner]
+enabled = true
+headless = false
+user_data_dir = ""
+market = "jp"
+cooldown_hours = 6
+trust_recommended_badge = true
+
 [serpapi]
 monthly_quota = 250
 daily_budget_cap = 8

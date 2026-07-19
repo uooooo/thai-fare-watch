@@ -4,6 +4,7 @@ import { makeDryRunStore } from "../state/store";
 import { FliSource, makeCiBreaker } from "./fli";
 import { GfBrowserSource } from "./gf-browser/index";
 import { SerpApiSource } from "./serpapi";
+import { SkyscannerBrowserSource } from "./skyscanner/index";
 import { TravelpayoutsSource } from "./travelpayouts";
 import type { FareSource, RunnerEnv } from "./types";
 
@@ -32,5 +33,12 @@ export function buildSources(
 		new FliSource(cfg, { breaker: makeCiBreaker(effectiveStore, cfg, env) }),
 		new TravelpayoutsSource(cfg),
 		new SerpApiSource(cfg, { store: effectiveStore, now: env.now }),
+		// skyscanner(Task 15b: Playwright, ローカル専用・best-effort)。gf-browserと同様
+		// 常に構築するが、available(env)がCI/ブラウザ無し環境に加えcfg.skyscanner.enabled
+		// およびcooldown中(直前のブロック検出後のstate.breakers.skyscanner)でもfalseを返す。
+		// storeはdryRun時のみラップ済みのeffectiveStoreを渡す(fli/serpapiと同じくC1対策:
+		// ソース内部が直接触るcooldownブレーカがdryRunガードを経由せず実ディスクに書き込む
+		// 経路を持つため)。
+		new SkyscannerBrowserSource(cfg, { store: effectiveStore, now: env.now }),
 	];
 }

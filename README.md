@@ -19,8 +19,8 @@
 | **Travelpayouts** | キャッシュ最安値の広域掃引（Macスリープ中の面カバーに強い） | 無料（無料枠あり） | ✅ 実装済み |
 | **セール速報RSS** | LCCセール発表をキーワードマッチで即時検知 | 無料 | ✅ 実装済み |
 | **SerpAPI** | 任意の販売元検証フォールバック（ローカル不在時） | 無料250検索/月（任意登録） | ✅ 実装済み |
-| **Google Flights ブラウザ (Playwright)** | ローカル主砲。日付グリッドの深掃引 + 予約オプションパネルからの販売元検証 | 無料・キー不要 | 🚧 Task 15 で実装予定 |
-| **Skyscanner ブラウザ (Playwright)** | ローカル専用・ベストエフォート。信頼代理店バッジ + 広域メタサーチ。CI(データセンターIP)では無効 | 無料・キー不要 | 🚧 Task 15b で実装予定 |
+| **Google Flights ブラウザ (Playwright)** | ローカル主砲。日付グリッドの深掃引 + 予約オプションパネルからの販売元検証 | 無料・キー不要 | ✅ 実装済み |
+| **Skyscanner ブラウザ (Playwright)** | ローカル専用・ベストエフォート。「おすすめの提供会社」バッジ→trusted_ota連携。CI(データセンターIP)では無効 | 無料・キー不要 | ✅ 実装済み（best-effort — PerimeterX対策で高頻度にblocked/cooldownになる想定。他ソースが荷を負う） |
 
 - **実行基盤**: ローカルMac（`launchd` 定期実行、住宅IPでブラウザ自動化）+ GitHub Actions（`cron`、APIソースのみ）のハイブリッド。どちらも同じ `tfw watch --once` を実行する。
 - **状態管理**: DBを持たず "git scraping" 方式で、`data/` 配下のJSON/JSONLに状態を永続化し、git commit/pushで両ランナー間で共有する。
@@ -30,11 +30,11 @@
 
 ```bash
 bun install
-bunx playwright install chrome   # ローカルのブラウザ自動化に必要（Google Flights/Skyscannerアダプタ = Task 15/15b で有効化予定）
+bunx playwright install chrome   # ローカルのブラウザ自動化に必要（Google Flights/Skyscannerアダプタが使用）
 cp .env.example .env             # DISCORD_WEBHOOK_URL を設定（必須）
 ```
 
-> 🚧 現状の実装ステータス: コア（設定・多層ソースのうち fli / Travelpayouts / RSS / SerpAPI・経路合成・信頼フィルタ・通知・監視パイプライン・CLI）は動作する。ブラウザ主砲（Google Flights = Task 15、Skyscanner = Task 15b）と launchd 常駐（Task 16）は実装中。それまでは `tfw watch` は fli + Travelpayouts + RSS + (任意)SerpAPI で動作する。
+> 🚧 現状の実装ステータス: コア（設定・多層ソースのうち fli / Travelpayouts / RSS / SerpAPI・経路合成・信頼フィルタ・通知・監視パイプライン・CLI）とブラウザ主砲（Google Flights = Task 15）は動作する。Skyscanner(Task 15b)はローカル専用のbest-effortアダプタとして実装済みだが、PerimeterX等のbot対策により高頻度でblocked/cooldownになる想定（設計上、他ソースが荷を負う）。launchd 常駐（Task 16）のみ未実装。ローカルのブラウザが無い/CI環境では `tfw watch` は fli + Travelpayouts + RSS + (任意)SerpAPI で動作する。
 
 任意で以下も `.env` に設定するとカバレッジが増える。
 

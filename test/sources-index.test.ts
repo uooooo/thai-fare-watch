@@ -102,24 +102,26 @@ describe("makeCiBreaker on a dryRun store (C1)", () => {
 });
 
 describe("buildSources", () => {
-	// Task 15: gf-browser(Playwright)が追加され、opts省略時/dryRun時ともに4ソースを返す。
-	// available(env)による絞り込みはbuildSources自身の責務ではなく呼び出し側(pipeline/cli)が
-	// 行うため、isCI=trueのenvCI下でもgf-browserは(available=falseになるだけで)配列には含まれる。
-	test("opts省略時は4ソース(fli/gf-browser/serpapi/travelpayouts)を返す", () => {
+	// Task 15b: skyscanner(Playwright, best-effort)が追加され、opts省略時/dryRun時ともに
+	// 5ソースを返す(Task 15でgf-browser追加時の3→4と同じ形の変更)。available(env)による
+	// 絞り込みはbuildSources自身の責務ではなく呼び出し側(pipeline/cli)が行うため、
+	// isCI=trueのenvCI下でもgf-browser/skyscannerは(available=falseになるだけで)配列には
+	// 含まれる。
+	test("opts省略時は5ソース(fli/gf-browser/serpapi/skyscanner/travelpayouts)を返す", () => {
 		const dir = mkdtempSync(join(tmpdir(), "tfw-"));
 		const store = new Store(dir);
 		const sources = buildSources(cfg, store, envCI);
 		expect(sources.map((s) => s.name).sort()).toEqual(
-			["fli", "gf-browser", "serpapi", "travelpayouts"].sort(),
+			["fli", "gf-browser", "serpapi", "skyscanner", "travelpayouts"].sort(),
 		);
 	});
 
-	test("dryRun:trueでも同じ4ソースを返す(内部storeがdryRunラップされるだけ)", () => {
+	test("dryRun:trueでも同じ5ソースを返す(内部storeがdryRunラップされるだけ)", () => {
 		const dir = mkdtempSync(join(tmpdir(), "tfw-"));
 		const store = new Store(dir);
 		const sources = buildSources(cfg, store, envCI, { dryRun: true });
 		expect(sources.map((s) => s.name).sort()).toEqual(
-			["fli", "gf-browser", "serpapi", "travelpayouts"].sort(),
+			["fli", "gf-browser", "serpapi", "skyscanner", "travelpayouts"].sort(),
 		);
 	});
 
@@ -130,5 +132,14 @@ describe("buildSources", () => {
 		const gfBrowser = sources.find((s) => s.name === "gf-browser");
 		expect(gfBrowser).toBeDefined();
 		expect(gfBrowser?.available(envCI)).toBe(false);
+	});
+
+	test("skyscannerはisCI=trueのenvCI下ではavailable=false(配列には含まれる)", () => {
+		const dir = mkdtempSync(join(tmpdir(), "tfw-"));
+		const store = new Store(dir);
+		const sources = buildSources(cfg, store, envCI);
+		const skyscanner = sources.find((s) => s.name === "skyscanner");
+		expect(skyscanner).toBeDefined();
+		expect(skyscanner?.available(envCI)).toBe(false);
 	});
 });

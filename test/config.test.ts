@@ -62,6 +62,21 @@ describe("config", () => {
 			loadConfig({ path: "test/fixtures/unknown-key.toml", env: {} }),
 		).toThrow();
 	});
+	// Task 15b: skyscannerセクションの既定値(TOML未指定でも存在すること)。
+	// headless=falseがgf-browserのbrowser.headless=trueと非対称であることを含めて確認する
+	// (Skyscannerは温めたheadfulの実チャネルを前提とするため既定を意図的に反転させている)。
+	test("skyscanner既定値(未設定TOMLでも存在し、headless=falseがgf-browserと非対称)", () => {
+		const c = loadConfig({ env: {} });
+		expect(c.skyscanner).toEqual({
+			enabled: true,
+			headless: false,
+			user_data_dir: "",
+			market: "jp",
+			cooldown_hours: 6,
+			trust_recommended_badge: true,
+		});
+		expect(c.skyscanner.headless).not.toBe(c.browser.headless);
+	});
 	test("thresholdsを一部だけ指定すると残りは既定値にフォールバックする", () => {
 		const c = loadConfig({
 			path: "test/fixtures/partial-thresholds.toml",

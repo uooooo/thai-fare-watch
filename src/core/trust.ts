@@ -39,6 +39,12 @@ export function classifySeller(
 		seller: string;
 		isAirlineDirectHint?: boolean;
 		legAirlines: string[];
+		// Task 15b追加(additive): Skyscannerの「おすすめの提供会社(Recommended Provider)」
+		// バッジ。Skyscanner自身が各agencyを個別に審査して付与する独立の信頼シグナルなので、
+		// 未知(allowlist外)のagencyであってもtrusted_ota相当として扱う。省略時(既存呼び出し
+		// 全て)はundefinedのままrule 3をスキップするだけなので、この引数を渡さない既存呼び出し
+		// の挙動は一切変わらない。
+		recommendedBadge?: boolean;
 	},
 	trustedOtas: string[],
 ): SellerOffer["trust"] {
@@ -56,7 +62,17 @@ export function classifySeller(
 		return "airline";
 	}
 
-	// 3. 信頼済みOTA allowlistのいずれかと完全一致すればtrusted_ota。
+	// 3. Task 15b追加(additive): SkyscannerのrecommendedBadge===trueはrule 4(allowlist
+	//    完全一致)と同格のtrusted_ota信号として扱う。rule 1/2(airline判定)より後段に置く
+	//    ことで、バッジがあっても運航会社直販判定を上書きできない（航空会社が自社便に
+	//    誤ってバッジ付きで並んでいても、常にairline側が優先される）。ここは文字列の
+	//    ファジーマッチではなく単純なbooleanチェックなので、trust.tsの完全一致のみという
+	//    不変条件（なりすまし対策）を弱めない —この真偽値自体の正しさは呼び出し側
+	//    (Skyscannerアダプタのparse層)がバッジ文言から判定する責務であり、trust.ts側は
+	//    それを rule 1のisAirlineDirectHint同様に無条件で信用するだけ。
+	if (input.recommendedBadge === true) return "trusted_ota";
+
+	// 4. 信頼済みOTA allowlistのいずれかと完全一致すればtrusted_ota。
 	//    前方一致・部分一致は採用しない（詳細はnormalizedEqualsのコメント参照）。
 	//    CJKの装飾（例:「Trip.com（トリップ）」→"tripcom"）は正規化で消えるため完全一致の
 	//    まま信頼される。一方、ラテン文字の接尾辞（例: "Trip.com (Japan)"→"tripcomjapan"）は
@@ -67,7 +83,7 @@ export function classifySeller(
 		return "trusted_ota";
 	}
 
-	// 4. それ以外（Agoda・無名OTA等）はreference。
+	// 5. それ以外（Agoda・無名OTA等）はreference。
 	return "reference";
 }
 

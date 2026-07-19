@@ -49,6 +49,14 @@ export type Config = {
 			cooldown_hours: number;
 		};
 	};
+	skyscanner: {
+		enabled: boolean;
+		headless: boolean;
+		user_data_dir: string;
+		market: string;
+		cooldown_hours: number;
+		trust_recommended_badge: boolean;
+	};
 	serpapi: { monthly_quota: number; daily_budget_cap: number };
 	rss_feeds: FeedConf[];
 	rss_keywords: { places: string[]; airlines: string[]; context: string[] };
@@ -110,6 +118,22 @@ const FLI_CIRCUIT_BREAKER_DEFAULTS: Config["fli"]["ci_circuit_breaker"] = {
 const FLI_DEFAULTS: Config["fli"] = {
 	enabled: true,
 	ci_circuit_breaker: FLI_CIRCUIT_BREAKER_DEFAULTS,
+};
+
+// headlessは既定false —Skyscanner(PerimeterX+TLSフィンガープリンティング)は素の
+// headless自動化を高確度で検出/ブロックするため、実チャネル(channel:"chrome")の
+// 「温めた」永続プロファイル+headfulの組が最も通りやすい想定(gf-browserのheadless
+// 既定trueとは対照的)。user_data_dirは既定""(=空)で、実際の解決(リポジトリ配下の
+// .skyscanner-profile/へのフォールバック)はsrc/sources/skyscanner/index.tsの
+// 遅延importされたdefaultLaunchPersistent内で行う(config.ts自体はプロファイルの
+// 実パス解決に関与しない)。
+const SKYSCANNER_DEFAULTS: Config["skyscanner"] = {
+	enabled: true,
+	headless: false,
+	user_data_dir: "",
+	market: "jp",
+	cooldown_hours: 6,
+	trust_recommended_badge: true,
 };
 
 const SERPAPI_DEFAULTS: Config["serpapi"] = {
@@ -200,6 +224,18 @@ const configSchema = z.strictObject({
 				.default(FLI_CIRCUIT_BREAKER_DEFAULTS),
 		})
 		.default(FLI_DEFAULTS),
+	skyscanner: z
+		.strictObject({
+			enabled: z.boolean().default(SKYSCANNER_DEFAULTS.enabled),
+			headless: z.boolean().default(SKYSCANNER_DEFAULTS.headless),
+			user_data_dir: z.string().default(SKYSCANNER_DEFAULTS.user_data_dir),
+			market: z.string().default(SKYSCANNER_DEFAULTS.market),
+			cooldown_hours: z.number().default(SKYSCANNER_DEFAULTS.cooldown_hours),
+			trust_recommended_badge: z
+				.boolean()
+				.default(SKYSCANNER_DEFAULTS.trust_recommended_badge),
+		})
+		.default(SKYSCANNER_DEFAULTS),
 	serpapi: z
 		.strictObject({
 			monthly_quota: z.number().default(SERPAPI_DEFAULTS.monthly_quota),

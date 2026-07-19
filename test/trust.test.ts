@@ -129,6 +129,81 @@ describe("classifySeller", () => {
 	});
 });
 
+// Task 15b追加(additive): classifySellerのrecommendedBadge引数(Skyscannerの
+// 「おすすめの提供会社」バッジ)。既存のrule 1/2/4/5は一切変更していないので、
+// badgeを渡さない既存呼び出し(上のdescribeブロック全て)は挙動が変わらないことが前提。
+describe("classifySeller (recommendedBadge, Task 15b additive)", () => {
+	test("badge=trueかつallowlist外の未知agency→trusted_ota", () => {
+		expect(
+			classifySeller(
+				{ seller: "TravelHub", legAirlines: [], recommendedBadge: true },
+				trusted,
+			),
+		).toBe("trusted_ota");
+	});
+
+	test("badge=falseかつ未知agency→reference（バッジが無ければ普段通り）", () => {
+		expect(
+			classifySeller(
+				{ seller: "TravelHub", legAirlines: [], recommendedBadge: false },
+				trusted,
+			),
+		).toBe("reference");
+	});
+
+	test("recommendedBadge省略(既存呼び出し)は従来通りreference", () => {
+		expect(
+			classifySeller({ seller: "TravelHub", legAirlines: [] }, trusted),
+		).toBe("reference");
+	});
+
+	// バッジはrule 3として rule 1/2(airline判定)より後に評価されるため、運航会社直販の
+	// 判定を上書きできない —航空会社自身がおすすめ表示されても常にairline側が優先される。
+	test("badge=trueでも運航会社名と完全一致するsellerはairlineのまま(バッジはrule1/2を上書きしない)", () => {
+		expect(
+			classifySeller(
+				{
+					seller: "ZIPAIRで予約",
+					legAirlines: ["ZIPAIR"],
+					recommendedBadge: true,
+				},
+				trusted,
+			),
+		).toBe("airline");
+	});
+
+	test("badge=trueでもisAirlineDirectHint===trueが優先されairlineのまま", () => {
+		expect(
+			classifySeller(
+				{
+					seller: "Gotogate",
+					isAirlineDirectHint: true,
+					legAirlines: [],
+					recommendedBadge: true,
+				},
+				trusted,
+			),
+		).toBe("airline");
+	});
+
+	// バッジはallowlist一致(rule 4)と同格 —すでにallowlistに載っているOTAにバッジが
+	// 付いても、付かなくても、結果は変わらずtrusted_ota(rule 3とrule 4のどちらかで到達)。
+	test("allowlist済みOTAはbadge有無に関わらずtrusted_ota", () => {
+		expect(
+			classifySeller(
+				{ seller: "Trip.com", legAirlines: [], recommendedBadge: true },
+				trusted,
+			),
+		).toBe("trusted_ota");
+		expect(
+			classifySeller(
+				{ seller: "Trip.com", legAirlines: [], recommendedBadge: false },
+				trusted,
+			),
+		).toBe("trusted_ota");
+	});
+});
+
 // 追加テスト(b): applyTrust + bestTrustedSellerのend-to-end。
 // airline直販（最高値）・trusted OTA（中間値）・reference（全体最安）が混在する
 // VerifiedOfferに対し、bestTrustedSellerが「trust!=="reference"の中の最安」である

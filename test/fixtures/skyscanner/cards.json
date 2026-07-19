@@ -1,0 +1,55 @@
+[
+	{
+		"origin": "NRT",
+		"destination": "BKK",
+		"departDate": "2026-08-18",
+		"departTimeText": "17:05",
+		"airlineText": "ZIPAIR",
+		"transfersText": "直行",
+		"priceText": "¥15,700"
+	},
+	{
+		"origin": "NRT",
+		"destination": "BKK",
+		"departDate": "2026-08-18",
+		"departTimeText": "09:30",
+		"airlineText": "タイ・エアアジアX",
+		"transfersText": "直行",
+		"priceText": "¥16,450"
+	},
+	{
+		"origin": "NRT",
+		"destination": "BKK",
+		"departDate": "2026-08-18",
+		"airlineText": "大韓航空",
+		"transfersText": "経由1回",
+		"priceText": "¥21,300"
+	},
+	{
+		"origin": "NRT",
+		"destination": "BKK",
+		"departDate": "2026-08-18",
+		"departTimeText": "22:15",
+		"airlineText": "Scoot",
+		"transfersText": "直行",
+		"priceText": "価格を確認中"
+	},
+	{
+		"origin": "NRT",
+		"destination": "BKK",
+		"departDate": "2026-08-18",
+		"departTimeText": "08:40",
+		"airlineText": "",
+		"transfersText": "直行",
+		"priceText": "¥14,980"
+	},
+	{
+		"origin": "NRT",
+		"destination": "BKK",
+		"departDate": "2026-08-18",
+		"departTimeText": "13:50",
+		"airlineText": "ベトジェットエア",
+		"transfersText": "乗り継ぎ2回",
+		"priceText": "¥19,800"
+	}
+]
