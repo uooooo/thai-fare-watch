@@ -125,7 +125,69 @@ describe("FliSource.verify", () => {
 		expect(got.some((o) => o.airline === "VN")).toBe(false);
 	});
 
-	test("非JPY出力は変換せずthrow（USDサイレント変換禁止）", async () => {
+	test("non-JPY行は個別スキップし良行のみ返す（1件混入・全滅ではない）", async () => {
+		const mixed = JSON.stringify({
+			success: true,
+			flights: [
+				{
+					stops: 0,
+					price: 36072.0,
+					currency: "JPY",
+					legs: [
+						{
+							departure_airport: { code: "NRT" },
+							arrival_airport: { code: "BKK" },
+							departure_time: "2026-08-18T17:00:00",
+							arrival_time: "2026-08-18T21:40:00",
+							airline: { code: "ZG" },
+							flight_number: "51",
+						},
+					],
+				},
+				{
+					// non-JPY混入行。全滅ではないのでスキップのみ、他の良行はthrowで捨てない。
+					stops: 0,
+					price: 250.0,
+					currency: "USD",
+					legs: [
+						{
+							departure_airport: { code: "NRT" },
+							arrival_airport: { code: "BKK" },
+							departure_time: "2026-08-18T10:00:00",
+							arrival_time: "2026-08-18T14:00:00",
+							airline: { code: "AA" },
+							flight_number: "1",
+						},
+					],
+				},
+				{
+					stops: 0,
+					price: 40000.0,
+					currency: "JPY",
+					legs: [
+						{
+							departure_airport: { code: "NRT" },
+							arrival_airport: { code: "BKK" },
+							departure_time: "2026-08-18T09:00:00",
+							arrival_time: "2026-08-18T13:00:00",
+							airline: { code: "TG" },
+							flight_number: "621",
+						},
+					],
+				},
+			],
+		});
+		const s = new FliSource(cfg, {
+			run: async () => ({ exitCode: 0, stdout: mixed, stderr: "" }),
+			breaker: mkBreaker(),
+		});
+		const got = await s.verify(jp, "2026-08-18");
+		expect(got.length).toBe(2); // USD行のみ除外、JPY2件は活きる
+		expect(got.map((o) => o.airline)).toEqual(["ZG", "TG"]);
+		expect(got.every((o) => o.priceJpy > 0)).toBe(true);
+	});
+
+	test("non-JPYが1件のみ（全滅）→ 通貨名を含めてthrow", async () => {
 		const usd = JSON.stringify({
 			success: true,
 			flights: [
@@ -151,8 +213,8 @@ describe("FliSource.verify", () => {
 			run: async () => ({ exitCode: 0, stdout: usd, stderr: "" }),
 			breaker,
 		});
-		expect(s.verify(jp, "2026-08-02")).rejects.toThrow();
-		expect(breaker.isOpen()).toBe(false); // 1回のみ、まだ開かない
+		await expect(s.verify(jp, "2026-08-02")).rejects.toThrow(/USD/);
+		expect(breaker.isOpen()).toBe(false); // 1回のみ、まだ開かない（閾値3未満）
 	});
 
 	test("3連続失敗でブレーカが開きavailable=false", async () => {
@@ -176,7 +238,9 @@ describe("FliSource.sweep", () => {
 		const s = new FliSource(cfg, { run: spy, breaker: mkBreaker() });
 		const got = await s.sweep([jp], { from: "2026-08-01", to: "2026-08-07" });
 		expect(captured).toEqual(DATES_ARGS);
+		// fixtureは4件(price:null 1件を含む)だが、有効な3件のみ返る。
 		expect(got.length).toBe(3);
+		expect(got.some((o) => o.departDate === "2026-08-18")).toBe(false); // null価格行はスキップ
 		const o = got[0];
 		if (!o) throw new Error("expected observations");
 		expect(o.source).toBe("fli");
@@ -191,6 +255,42 @@ describe("FliSource.sweep", () => {
 		expect(
 			s.sweep([jp], { from: "2026-08-01", to: "2026-08-07" }),
 		).rejects.toThrow();
+	});
+
+	test("全行が非JPY（dates）→ 通貨名を含めてthrow＋breaker.recordFailureが発火", async () => {
+		const allUsd = JSON.stringify({
+			success: true,
+			dates: [
+				{
+					departure_date: "2026-08-15",
+					return_date: null,
+					price: 250.0,
+					currency: "USD",
+				},
+				{
+					departure_date: "2026-08-16",
+					return_date: null,
+					price: 260.0,
+					currency: "USD",
+				},
+			],
+		});
+		let failureCalls = 0;
+		const breaker = {
+			isOpen: () => false,
+			recordFailure: () => {
+				failureCalls++;
+			},
+			recordSuccess: () => {},
+		};
+		const s = new FliSource(cfg, {
+			run: async () => ({ exitCode: 0, stdout: allUsd, stderr: "" }),
+			breaker,
+		});
+		await expect(
+			s.sweep([jp], { from: "2026-08-01", to: "2026-08-07" }),
+		).rejects.toThrow(/USD/);
+		expect(failureCalls).toBe(1);
 	});
 
 	test("datesRunでも動く（別ヘルパ経由）", async () => {

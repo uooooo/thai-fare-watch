@@ -17,7 +17,7 @@
 		"sort_by_price": false,
 		"days": []
 	},
-	"count": 3,
+	"count": 4,
 	"dates": [
 		{
 			"departure_date": "2026-08-15",
@@ -35,6 +35,12 @@
 			"departure_date": "2026-08-17",
 			"return_date": null,
 			"price": 36575.0,
+			"currency": "JPY"
+		},
+		{
+			"departure_date": "2026-08-18",
+			"return_date": null,
+			"price": null,
 			"currency": "JPY"
 		}
 	]

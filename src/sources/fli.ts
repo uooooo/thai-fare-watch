@@ -122,10 +122,23 @@ function isValidPrice(p: unknown): p is number {
 	return typeof p === "number" && Number.isFinite(p) && p > 0;
 }
 
-// 価格付き行がnon-JPYならサイレント変換せずthrow（要件: USD混入をBLOCK）。
-function assertJpy(currency: string | null | undefined): void {
-	if (currency !== "JPY") {
-		throw new Error(`fli: expected JPY but got ${currency ?? "<none>"}`);
+function isJpyCurrency(currency: string | null | undefined): boolean {
+	return currency === "JPY";
+}
+
+// 価格付き行はあったが1件もJPYが取れなかった場合のみ「全滅」としてthrowする
+// （--currency JPY フラグが上流で無視された等のシグナル）。単発の混入行は
+// 呼び出し側が個別スキップ済みなので、ここでは全滅判定のみを行う。
+function assertNotAllNonJpy(
+	pricedCount: number,
+	collectedCount: number,
+	nonJpyCount: number,
+	observedCurrency: string | undefined,
+): void {
+	if (pricedCount > 0 && collectedCount === 0 && nonJpyCount > 0) {
+		throw new Error(
+			`fli: no JPY rows (currency=${observedCurrency}, ${nonJpyCount} rows skipped)`,
+		);
 	}
 }
 
@@ -211,6 +224,9 @@ export class FliSource implements FareSource {
 		}
 		const foundAt = this.now().toISOString();
 		const out: VerifiedOffer[] = [];
+		let pricedCount = 0;
+		let nonJpyCount = 0;
+		let observedCurrency: string | undefined;
 		for (const f of parsed.flights) {
 			const legs = f.legs;
 			if (!Array.isArray(legs) || legs.length === 0) continue;
@@ -219,8 +235,14 @@ export class FliSource implements FareSource {
 			if (!first || !last) continue;
 			// 不完全行（price:null等）は個別にスキップし、残りの良行は活かす。
 			if (!isValidPrice(f.price)) continue;
-			// 価格付き行がnon-JPYならBLOCK（サイレントUSD変換を防ぐ）。
-			assertJpy(f.currency);
+			pricedCount++;
+			// 価格付き行がnon-JPYなら個別スキップ（サイレントUSD変換は防ぐ）。
+			// 全滅（JPY行が1件も取れない）場合のみループ後にthrowする。
+			if (!isJpyCurrency(f.currency)) {
+				nonJpyCount++;
+				observedCurrency ??= f.currency ?? "<none>";
+				continue;
+			}
 			const origin = first.departure_airport.code;
 			const destination = last.arrival_airport.code;
 			const flightNumber = legs
@@ -245,8 +267,9 @@ export class FliSource implements FareSource {
 				sellers: [],
 			});
 		}
-		// 有効行が0でも「空の成功」とみなしthrowしない。
-		// 失敗判定はexitCode≠0 / JSON不正 / top-level形状不正のみ。
+		// 価格付き行はあったが1件もJPYが取れなければ全滅としてthrow。
+		// 有効行が0でも（non-JPY混入がなければ）「空の成功」とみなしthrowしない。
+		assertNotAllNonJpy(pricedCount, out.length, nonJpyCount, observedCurrency);
 		return out;
 	}
 
@@ -257,9 +280,18 @@ export class FliSource implements FareSource {
 		}
 		const foundAt = this.now().toISOString();
 		const out: FareObservation[] = [];
+		let pricedCount = 0;
+		let nonJpyCount = 0;
+		let observedCurrency: string | undefined;
 		for (const d of parsed.dates) {
 			if (!isValidPrice(d.price)) continue; // 不完全行はスキップ
-			assertJpy(d.currency);
+			pricedCount++;
+			// 価格付き行がnon-JPYなら個別スキップ。全滅時のみループ後にthrow。
+			if (!isJpyCurrency(d.currency)) {
+				nonJpyCount++;
+				observedCurrency ??= d.currency ?? "<none>";
+				continue;
+			}
 			const departDate = d.departure_date;
 			const priceJpy = Math.round(d.price);
 			// ネイティブdatesはleg詳細を返さない: transfersは0プレースホルダ、
@@ -283,6 +315,8 @@ export class FliSource implements FareSource {
 				foundAt,
 			});
 		}
+		// 価格付き行はあったが1件もJPYが取れなければ全滅としてthrow。
+		assertNotAllNonJpy(pricedCount, out.length, nonJpyCount, observedCurrency);
 		return out;
 	}
 }
