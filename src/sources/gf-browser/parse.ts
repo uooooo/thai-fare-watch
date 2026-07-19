@@ -10,7 +10,10 @@ export type BookingRow = { sellerText: string; priceText: string };
 
 // "¥14,980" / "14,980円" / "36072 円～"(先頭の値のみ) → 14980。
 // 桁区切りカンマの有無・全角/半角¥のどちらにも対応。数字+(¥|円)の組が無ければundefined。
-const PRICE_RE = /[¥￥]\s*([\d,]+)|([\d,]+)\s*円/;
+// 各分岐の数字列の直後に(?![.万])を置き、"¥1.5万"のような万単位の省略/小数表記を
+// 明確に除外する——このガードが無いと"¥1.5万"は"¥1"にマッチして誤って1を返してしまう
+// (小数点で数字列が途切れるため)。境界(文字列末尾や空白・円そのもの)は問題なく許容する。
+const PRICE_RE = /[¥￥]\s*([\d,]+)(?![.万])|([\d,]+)(?![.万])\s*円/;
 
 export function parsePriceJpy(text: string): number | undefined {
 	const m = text.match(PRICE_RE);

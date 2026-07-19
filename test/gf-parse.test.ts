@@ -30,6 +30,16 @@ describe("parsePriceJpy", () => {
 		expect(parsePriceJpy("残席わずか")).toBeUndefined();
 		expect(parsePriceJpy("価格情報なし")).toBeUndefined();
 	});
+	// 万単位の省略/小数表記(例: 1.5万円=15,000円)は非対応。数字の直後が"."または"万"の場合、
+	// 誤って先頭の整数部分だけ(例: "¥1.5万"→1)を実額として返してしまうバグがあったため、
+	// 数字の直後にこれらが続く場合は明確にundefinedを返す(黒っぽく間違った値より、
+	// 「パースできなかった」ことが分かる方が安全)。
+	test("¥1.5万 → undefined(万単位の省略/小数表記は非対応)", () => {
+		expect(parsePriceJpy("¥1.5万")).toBeUndefined();
+	});
+	test("1.2万円 → undefined(万単位の省略/小数表記は非対応)", () => {
+		expect(parsePriceJpy("1.2万円")).toBeUndefined();
+	});
 });
 
 describe("parseGridAria (CONSTRUCTED fixture: 実キャプチャの曜日で裏付け済み)", () => {

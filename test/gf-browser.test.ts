@@ -3,6 +3,7 @@ import { loadConfig } from "../src/config";
 import type { Browser, Page } from "../src/sources/gf-browser/index";
 import { GfBrowserSource, rateLimitMs } from "../src/sources/gf-browser/index";
 import type { OdPair } from "../src/types";
+import realResultRowLabels from "./fixtures/gf/result-rows.json";
 
 const cfg = loadConfig({ env: {} });
 const now = new Date("2026-07-19T00:00:00Z");
@@ -16,6 +17,15 @@ const THAI_VJ_LABEL =
 	"36575 円～。 タイ・ベトジェット・エア が運航する直行便。 火曜日, 8月 18 8:55 成田国際空港発、火曜日, 8月 18 13:45 スワンナプーム国際空港着。 合計時間 6時間 50分。   フライトを選択";
 const ZIP_BOOKING_LABEL =
 	"航空会社 ZIPAIR Tokyo での予約手続きに進む（料金: 36072 円）";
+// 実fixture(test/fixtures/gf/result-rows.json)中の、同一料金(¥46,300)だが出発時刻が
+// 異なる3本のTHAI直行便(同route/date)。flightNumberは常にundefinedなので、idに
+// departAt/arriveAtを含めない旧実装では3本とも同一idに潰れてしまう(dedup誤爆)。
+const THAI_1050_LABEL =
+	"46300 円～。 THAI が運航する直行便。 火曜日, 8月 18 10:50 成田国際空港発、火曜日, 8月 18 15:20 スワンナプーム国際空港着。 合計時間 6時間 30分。   フライトを選択";
+const THAI_1200_LABEL =
+	"46300 円～。 THAI が運航する直行便。 火曜日, 8月 18 12:00 成田国際空港発、火曜日, 8月 18 16:30 スワンナプーム国際空港着。 合計時間 6時間 30分。   フライトを選択";
+const THAI_1725_LABEL =
+	"46300 円～。 THAI が運航する直行便。 火曜日, 8月 18 17:25 成田国際空港発、火曜日, 8月 18 21:55 スワンナプーム国際空港着。 合計時間 6時間 30分。   フライトを選択";
 const GRID_LABELS = [
 	"8月1日 土曜日、32000円",
 	"8月2日 日曜日、31500円",
@@ -180,7 +190,7 @@ describe("GfBrowserSource.sweep", () => {
 		expect(got.map((o) => o.departDate)).toEqual(["2026-08-01"]);
 	});
 
-	test("複数ペアはBun.sleepでmin_interval_sec〜+jitter_sec分だけ待ち、ペア間(N-1回)のみ呼ぶ", async () => {
+	test("複数ペアはdeps.sleepでmin_interval_sec〜+jitter_sec秒だけ待ち、ペア間(N-1回)のみ呼ぶ(注入したsleepで検証、グローバルBun.sleepは書き換えない)", async () => {
 		const calls = newCalls();
 		const pageA = fakePage(calls, { gridLabels: GRID_LABELS });
 		const pageB = fakePage(calls, { gridLabels: GRID_LABELS });
@@ -190,35 +200,28 @@ describe("GfBrowserSource.sweep", () => {
 			...cfg,
 			browser: { ...cfg.browser, min_interval_sec: 0.01, jitter_sec: 0.01 },
 		};
-		const src = new GfBrowserSource(tinyCfg, { launch, now });
-
-		const originalSleep = Bun.sleep;
 		const sleptMs: number[] = [];
-		const bunWithSleep = Bun as unknown as {
-			sleep: (ms: number) => Promise<void>;
-		};
-		bunWithSleep.sleep = (ms: number) => {
+		const sleep = (ms: number) => {
 			sleptMs.push(ms);
 			return Promise.resolve();
 		};
-		try {
-			const pairB2: OdPair = {
-				origin: "OSA",
-				destination: "BKK",
-				market: "jp",
-			};
-			const pairC2: OdPair = {
-				origin: "FUK",
-				destination: "BKK",
-				market: "jp",
-			};
-			await src.sweep([nrtBkk, pairB2, pairC2], {
-				from: "2026-08-01",
-				to: "2026-08-31",
-			});
-		} finally {
-			bunWithSleep.sleep = originalSleep;
-		}
+		const src = new GfBrowserSource(tinyCfg, { launch, now, sleep });
+
+		const pairB2: OdPair = {
+			origin: "OSA",
+			destination: "BKK",
+			market: "jp",
+		};
+		const pairC2: OdPair = {
+			origin: "FUK",
+			destination: "BKK",
+			market: "jp",
+		};
+		await src.sweep([nrtBkk, pairB2, pairC2], {
+			from: "2026-08-01",
+			to: "2026-08-31",
+		});
+
 		expect(sleptMs.length).toBe(2); // 3ペア→ペア間は2回のみ、最後のペアの後には呼ばない
 		for (const ms of sleptMs) {
 			expect(ms).toBeGreaterThanOrEqual(10);
@@ -306,7 +309,14 @@ describe("GfBrowserSource.verify", () => {
 		expect(got[0]?.sellers).toEqual([]);
 	});
 
-	test("重複するaria-label(同一内容)はstableIdで重複除去される", async () => {
+	// 重複除去は現在、パース前の生aria-label文字列を完全一致(Set)でdedupする段で行われる
+	// (Google実DOMが結果行をbyte-identicalに二重表示するため)。ZIP_LABELの2件はここで
+	// 1件に潰れ、THAI_VJ_LABELの1件と合わせて期待値は2件——これはstableId経由の後段dedup
+	// のみだった旧実装でも同じ値になる(内容が完全一致する重複はどちらの実装でも2件に
+	// 収束するため、このテスト単体では新旧の実装差を検出できない)。新旧の実装差
+	// (=同一料金だが別便のflightを誤って1件に潰さないか)を検出するのは、この直後の
+	// 「同一料金・別時刻」テストと実fixtureテスト。
+	test("重複するaria-label(同一内容)は生ラベルの完全一致dedupで除去される(パース前)", async () => {
 		const calls = newCalls();
 		const page = fakePage(calls, {
 			resultLabels: [ZIP_LABEL, ZIP_LABEL, THAI_VJ_LABEL],
@@ -316,6 +326,47 @@ describe("GfBrowserSource.verify", () => {
 		const src = new GfBrowserSource(cfg, { launch, now });
 		const got = await src.verify(nrtBkk, "2026-08-18");
 		expect(got.length).toBe(2);
+	});
+
+	// Critical fix regression: parsed.flightNumberはgf-browserでは常にundefinedなので、
+	// 旧実装のid(flightNumber+priceJpyのみで識別)では同一route/date/価格の別便が
+	// 衝突して脱落していた。departAt/arriveAtをidに含めることで、時刻が異なれば
+	// 別idとして区別できる。
+	test("同一料金・別時刻の便は別idとして全件残る(THAI 3便、いずれも¥46,300)", async () => {
+		const calls = newCalls();
+		const page = fakePage(calls, {
+			resultLabels: [THAI_1050_LABEL, THAI_1200_LABEL, THAI_1725_LABEL],
+		});
+		const { launch } = fakeLaunch([page], calls);
+		const src = new GfBrowserSource(cfg, { launch, now });
+
+		const got = await src.verify(nrtBkk, "2026-08-18");
+
+		expect(got.length).toBe(3);
+		expect(new Set(got.map((o) => o.id)).size).toBe(3);
+		expect(got.map((o) => o.departAt).sort()).toEqual([
+			"2026-08-18T10:50:00",
+			"2026-08-18T12:00:00",
+			"2026-08-18T17:25:00",
+		]);
+	});
+
+	// Critical fix regression(実fixture): test/fixtures/gf/result-rows.jsonは実キャプチャ
+	// 18行=9便が2重表示されたもの。旧実装ではGoogleの2重表示は正しく1件に畳めるが、
+	// 9便中3便(THAI 10:50/12:00/17:25、いずれも¥46,300)が同一idに衝突し、9件→7件に
+	// 脱落していた(THAI 12:00と17:25が消える)。修正後は9件全てが別idで残る。
+	test("実fixture(18行=9便×2重複)は9件の別便すべてが残る(同一料金の別便を誤って1件に潰さない)", async () => {
+		const calls = newCalls();
+		const page = fakePage(calls, {
+			resultLabels: realResultRowLabels as string[],
+		});
+		const { launch } = fakeLaunch([page], calls);
+		const src = new GfBrowserSource(cfg, { launch, now });
+
+		const got = await src.verify(nrtBkk, "2026-08-18");
+
+		expect(got.length).toBe(9);
+		expect(new Set(got.map((o) => o.id)).size).toBe(9);
 	});
 
 	test("browser.close()は正常時・例外時のいずれもfinallyで呼ばれる", async () => {

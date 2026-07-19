@@ -37,7 +37,13 @@ export type Browser = {
 	close(): Promise<void>;
 };
 
-export type GfBrowserDeps = { launch?: () => Promise<Browser>; now?: Date };
+export type GfBrowserDeps = {
+	launch?: () => Promise<Browser>;
+	now?: Date;
+	// レート制御用の待機を注入可能にする(既定はBun.sleep)。テストがグローバルなBun.sleep
+	// を書き換えずに、決定的なノーオップ/計測用の実装を渡せるようにするため。
+	sleep?: (ms: number) => Promise<void>;
+};
 
 const SWEEP_EXPIRES_HOURS = 6;
 
@@ -90,12 +96,14 @@ export class GfBrowserSource implements FareSource {
 	private readonly cfg: Config;
 	private readonly launch: () => Promise<Browser>;
 	private readonly now: () => Date;
+	private readonly sleep: (ms: number) => Promise<void>;
 
 	constructor(cfg: Config, deps?: GfBrowserDeps) {
 		this.cfg = cfg;
 		this.launch = deps?.launch ?? (() => defaultLaunch(cfg));
 		const fixedNow = deps?.now;
 		this.now = () => fixedNow ?? new Date();
+		this.sleep = deps?.sleep ?? Bun.sleep;
 	}
 
 	available(env: RunnerEnv): boolean {
@@ -155,7 +163,7 @@ export class GfBrowserSource implements FareSource {
 				} finally {
 					await page.close();
 				}
-				if (i < pairs.length - 1) await Bun.sleep(rateLimitMs(this.cfg));
+				if (i < pairs.length - 1) await this.sleep(rateLimitMs(this.cfg));
 			}
 			return dedupeById(out);
 		} finally {
@@ -181,9 +189,15 @@ export class GfBrowserSource implements FareSource {
 					`verify ${od.origin}->${od.destination} ${date}`,
 				);
 
+				// Googleの実DOMは検索結果行をbyte-identicalなaria-label文字列として二重に
+				// レンダリングする。これをパース前に完全一致(Set)でdedupしておくことで、
+				// 「Google側の表示上の重複」と「別便が同一料金になった偶然の一致」を
+				// 混同しない(後者はparseResultRows後、departAt/arriveAtが異なるため別idになる)。
+				const uniqueLabels = Array.from(new Set(resultLabels));
+
 				const foundAt = this.now().toISOString();
 				const paired: Array<{ ariaLabel: string; offer: VerifiedOffer }> = [];
-				for (const ariaLabel of resultLabels) {
+				for (const ariaLabel of uniqueLabels) {
 					const row: RowRaw = { ariaLabel, departDate: date };
 					const [parsed] = parseResultRows([row]);
 					if (!parsed) continue;
@@ -191,12 +205,18 @@ export class GfBrowserSource implements FareSource {
 						ariaLabel,
 						offer: {
 							...parsed,
+							// flightNumberはgf-browserでは常にundefined(結果行のaria-labelに
+							// 便名が含まれないため)なので、これだけをdiscriminantにすると
+							// 同一route/date/価格の別便(例: 出発時刻だけが異なる複数便)が
+							// 衝突して脱落する。departAt/arriveAtを含めることで時刻が異なれば
+							// 別idになる。
 							id: stableId(
 								"gf",
 								od.origin,
 								od.destination,
 								date,
-								parsed.flightNumber,
+								parsed.departAt,
+								parsed.arriveAt,
 								parsed.priceJpy,
 							),
 							source: "gf-browser",
