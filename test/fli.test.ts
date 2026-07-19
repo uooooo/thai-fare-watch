@@ -3,7 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../src/config";
-import { FliSource, makeCiBreaker } from "../src/sources/fli";
+import { airportsOf, FliSource, makeCiBreaker } from "../src/sources/fli";
 import { Store } from "../src/state/store";
 
 const cfg = loadConfig({ env: {} });
@@ -45,7 +45,18 @@ const DATES_ARGS = [
 	"json",
 ];
 
+// FLI_ARGS/DATES_ARGSはどちらもindex2がdestination。都市→空港展開後の
+// 2件目のコンボ(destination=DMK)の期待値を組み立てるための小ヘルパ。
+const withDestination = (args: string[], destination: string): string[] => {
+	const copy = [...args];
+	copy[2] = destination;
+	return copy;
+};
+
 const jp = { origin: "NRT", destination: "BKK", market: "jp" };
+// テストではfli呼び出し間の待機(本番の実sleep)を注入して無効化する — 実タイマーで
+// テストを遅くしないため(タスク仕様: 「injectable/zero in tests」)。
+const zeroSleep = async () => {};
 const okRun = async () => ({ exitCode: 0, stdout: fixture, stderr: "" });
 const datesRun = async () => ({
 	exitCode: 0,
@@ -92,21 +103,43 @@ function captureWarn(): { text: () => string; restore: () => void } {
 	};
 }
 
+describe("airportsOf", () => {
+	test("都市コードは既定の空港候補配列(市→空港マップ)に展開される", () => {
+		expect(airportsOf("TYO")).toEqual(["NRT", "HND"]);
+		expect(airportsOf("BKK")).toEqual(["BKK", "DMK"]);
+	});
+	test("既に空港コードの場合はそのまま1件配列で返る(passthrough)", () => {
+		expect(airportsOf("NRT")).toEqual(["NRT"]);
+	});
+	test("未知のコードもそのまま1件配列で返る(passthrough)", () => {
+		expect(airportsOf("XYZ")).toEqual(["XYZ"]);
+	});
+});
+
 describe("FliSource.verify", () => {
-	test("確定したFLI_ARGSでrunを呼ぶ（片道/JPY/JP-POS/JSON）", async () => {
-		let captured: string[] = [];
+	test("確定したFLI_ARGSでrunを呼ぶ（片道/JPY/JP-POS/JSON、destination=BKKは[BKK,DMK]の2コンボに展開される）", async () => {
+		const calls: string[][] = [];
 		const spy = async (args: string[]) => {
-			captured = args;
+			calls.push(args);
 			return { exitCode: 0, stdout: fixture, stderr: "" };
 		};
-		const s = new FliSource(cfg, { run: spy, breaker: mkBreaker() });
+		const s = new FliSource(cfg, {
+			run: spy,
+			breaker: mkBreaker(),
+			sleep: zeroSleep,
+		});
 		await s.verify(jp, "2026-08-02");
-		expect(captured).toEqual(FLI_ARGS);
+		expect(calls).toEqual([FLI_ARGS, withDestination(FLI_ARGS, "DMK")]);
 	});
 
 	test("VerifiedOffer(sellers=[], source=fli, JPY価格)を返す", async () => {
 		const now = new Date("2026-07-19T00:00:00Z");
-		const s = new FliSource(cfg, { run: okRun, breaker: mkBreaker(), now });
+		const s = new FliSource(cfg, {
+			run: okRun,
+			breaker: mkBreaker(),
+			now,
+			sleep: zeroSleep,
+		});
 		const got = await s.verify(jp, "2026-08-02");
 		expect(got.length).toBeGreaterThan(0);
 		const o = got[0];
@@ -129,7 +162,11 @@ describe("FliSource.verify", () => {
 	});
 
 	test("複数レグ便は乗継数と結合便名を持つ", async () => {
-		const s = new FliSource(cfg, { run: okRun, breaker: mkBreaker() });
+		const s = new FliSource(cfg, {
+			run: okRun,
+			breaker: mkBreaker(),
+			sleep: zeroSleep,
+		});
 		const got = await s.verify(jp, "2026-08-02");
 		const multi = got.find((o) => o.transfers > 0);
 		if (!multi) throw new Error("expected a multi-leg offer");
@@ -141,9 +178,16 @@ describe("FliSource.verify", () => {
 	});
 
 	test("price:null等の不完全行はスキップし良行のみ返す", async () => {
-		const s = new FliSource(cfg, { run: okRun, breaker: mkBreaker() });
+		const s = new FliSource(cfg, {
+			run: okRun,
+			breaker: mkBreaker(),
+			sleep: zeroSleep,
+		});
 		const got = await s.verify(jp, "2026-08-02");
-		// fixtureは3便(ZG/7C/VN)、VN便はprice:null → 良行2件のみ返る
+		// fixtureは3便(ZG/7C/VN)、VN便はprice:null → 良行2件のみ返る。
+		// jpはBKK展開で2コンボ問い合わせるが、同一fixtureから導かれるidは
+		// origin/destinationがleg由来(=常にNRT/BKK)で不変なため、merge時にdedupeされ
+		// 単一コンボ時と同じ2件のまま。
 		expect(got.length).toBe(2);
 		expect(got.every((o) => o.priceJpy > 0)).toBe(true);
 		expect(got.some((o) => o.airline === "VN")).toBe(false);
@@ -204,9 +248,10 @@ describe("FliSource.verify", () => {
 		const s = new FliSource(cfg, {
 			run: async () => ({ exitCode: 0, stdout: mixed, stderr: "" }),
 			breaker: mkBreaker(),
+			sleep: zeroSleep,
 		});
 		const got = await s.verify(jp, "2026-08-18");
-		expect(got.length).toBe(2); // USD行のみ除外、JPY2件は活きる
+		expect(got.length).toBe(2); // USD行のみ除外、JPY2件は活きる(2コンボ分のdedupe後も2件)
 		expect(got.map((o) => o.airline)).toEqual(["ZG", "TG"]);
 		expect(got.every((o) => o.priceJpy > 0)).toBe(true);
 	});
@@ -236,14 +281,17 @@ describe("FliSource.verify", () => {
 		const s = new FliSource(cfg, {
 			run: async () => ({ exitCode: 0, stdout: usd, stderr: "" }),
 			breaker,
+			sleep: zeroSleep,
 		});
+		// jpはBKK展開で2コンボ(NRT-BKK/NRT-DMK)問い合わせ、mockはどちらもUSD全滅を返すため
+		// 全コンボ失敗の集約throwになる(=1回のrecordFailureのみ)。
 		await expect(s.verify(jp, "2026-08-02")).rejects.toThrow(/USD/);
 		expect(breaker.isOpen()).toBe(false); // 1回のみ、まだ開かない（閾値3未満）
 	});
 
 	test("3連続失敗でブレーカが開きavailable=false", async () => {
 		const breaker = mkBreaker();
-		const s = new FliSource(cfg, { run: failRun, breaker });
+		const s = new FliSource(cfg, { run: failRun, breaker, sleep: zeroSleep });
 		const env = { isCI: true, hasBrowser: false, now: new Date() };
 		for (let i = 0; i < 3; i++) {
 			await s.verify(jp, "2026-08-02").catch(() => {});
@@ -252,18 +300,76 @@ describe("FliSource.verify", () => {
 	});
 });
 
-describe("FliSource.sweep", () => {
-	test("ネイティブ`fli dates`をDATES_ARGSで呼び最安日をFareObservation化", async () => {
-		let captured: string[] = [];
+describe("FliSource.verify 都市→空港展開", () => {
+	test("TYO→BKKは4空港コンボ(NRT/HND×BKK/DMK)に展開され、fli flightsは常に空港コードで呼ばれる（Invalid airport codeパスを回避）", async () => {
+		const calls: string[][] = [];
 		const spy = async (args: string[]) => {
-			captured = args;
+			calls.push(args);
+			return { exitCode: 0, stdout: fixture, stderr: "" };
+		};
+		const s = new FliSource(cfg, {
+			run: spy,
+			breaker: mkBreaker(),
+			sleep: zeroSleep,
+		});
+		const got = await s.verify(
+			{ origin: "TYO", destination: "BKK", market: "jp" },
+			"2026-08-02",
+		);
+		expect(calls.length).toBe(4);
+		expect(calls.map((c) => [c[1], c[2]])).toEqual([
+			["NRT", "BKK"],
+			["NRT", "DMK"],
+			["HND", "BKK"],
+			["HND", "DMK"],
+		]);
+		for (const c of calls) {
+			expect(c).not.toContain("TYO");
+			expect(c).not.toContain("BKK-as-city");
+		}
+		expect(got.length).toBeGreaterThan(0);
+	});
+
+	test("NRT→BKKは1×2コンボ(NRT×BKK,DMK)に展開される", async () => {
+		const calls: string[][] = [];
+		const spy = async (args: string[]) => {
+			calls.push(args);
+			return { exitCode: 0, stdout: fixture, stderr: "" };
+		};
+		const s = new FliSource(cfg, {
+			run: spy,
+			breaker: mkBreaker(),
+			sleep: zeroSleep,
+		});
+		await s.verify(
+			{ origin: "NRT", destination: "BKK", market: "jp" },
+			"2026-08-02",
+		);
+		expect(calls.length).toBe(2);
+		expect(calls.map((c) => [c[1], c[2]])).toEqual([
+			["NRT", "BKK"],
+			["NRT", "DMK"],
+		]);
+	});
+});
+
+describe("FliSource.sweep", () => {
+	test("ネイティブ`fli dates`をDATES_ARGSで呼び最安日をFareObservation化(destination=BKKは[BKK,DMK]の2コンボに展開される)", async () => {
+		const calls: string[][] = [];
+		const spy = async (args: string[]) => {
+			calls.push(args);
 			return { exitCode: 0, stdout: datesFixture, stderr: "" };
 		};
-		const s = new FliSource(cfg, { run: spy, breaker: mkBreaker() });
+		const s = new FliSource(cfg, {
+			run: spy,
+			breaker: mkBreaker(),
+			sleep: zeroSleep,
+		});
 		const got = await s.sweep([jp], { from: "2026-08-01", to: "2026-08-07" });
-		expect(captured).toEqual(DATES_ARGS);
-		// fixtureは4件(price:null 1件を含む)だが、有効な3件のみ返る。
-		expect(got.length).toBe(3);
+		expect(calls).toEqual([DATES_ARGS, withDestination(DATES_ARGS, "DMK")]);
+		// fixtureは4件(price:null 1件を含む)、有効3件×2コンボ(BKK/DMKはdestinationが
+		// 異なりidも別になるためdedupeされない) = 6件。
+		expect(got.length).toBe(6);
 		expect(got.some((o) => o.departDate === "2026-08-18")).toBe(false); // null価格行はスキップ
 		const o = got[0];
 		if (!o) throw new Error("expected observations");
@@ -271,11 +377,19 @@ describe("FliSource.sweep", () => {
 		expect(o.departDate).toBe("2026-08-15");
 		expect(o.priceJpy).toBe(31742);
 		expect(o.market).toBe("jp");
+		expect(o.destination).toBe("BKK");
 		expect(o.id).toMatch(/^[0-9a-f]{12}$/);
+		const dmk = got.find((x) => x.destination === "DMK");
+		if (!dmk) throw new Error("expected a DMK combo observation");
+		expect(dmk.priceJpy).toBe(31742);
 	});
 
 	test("全ペア失敗でthrow", async () => {
-		const s = new FliSource(cfg, { run: failRun, breaker: mkBreaker() });
+		const s = new FliSource(cfg, {
+			run: failRun,
+			breaker: mkBreaker(),
+			sleep: zeroSleep,
+		});
 		expect(
 			s.sweep([jp], { from: "2026-08-01", to: "2026-08-07" }),
 		).rejects.toThrow();
@@ -310,17 +424,26 @@ describe("FliSource.sweep", () => {
 		const s = new FliSource(cfg, {
 			run: async () => ({ exitCode: 0, stdout: allUsd, stderr: "" }),
 			breaker,
+			sleep: zeroSleep,
 		});
+		// jpはBKK展開で2コンボ問い合わせ、両方USD全滅を返すため集約throw
+		// (recordFailureは全滅集約時に1回のみ発火、コンボ数に比例しない)。
 		await expect(
 			s.sweep([jp], { from: "2026-08-01", to: "2026-08-07" }),
 		).rejects.toThrow(/USD/);
 		expect(failureCalls).toBe(1);
 	});
 
-	test("datesRunでも動く（別ヘルパ経由）", async () => {
-		const s = new FliSource(cfg, { run: datesRun, breaker: mkBreaker() });
+	test("datesRunでも動く（別ヘルパ経由、BKK/DMK2コンボ分が積まれる）", async () => {
+		const s = new FliSource(cfg, {
+			run: datesRun,
+			breaker: mkBreaker(),
+			sleep: zeroSleep,
+		});
 		const got = await s.sweep([jp], { from: "2026-08-01", to: "2026-08-07" });
-		expect(got.map((o) => o.priceJpy)).toEqual([31742, 33675, 36575]);
+		expect(got.map((o) => o.priceJpy)).toEqual([
+			31742, 33675, 36575, 31742, 33675, 36575,
+		]);
 	});
 
 	// --- セキュリティ修正(Task 14 fix report 2): 生Errorオブジェクトのログ経由の秘密漏洩 ---
@@ -331,7 +454,11 @@ describe("FliSource.sweep", () => {
 				"uvx://fli?token=FLISWEEPSECRET1";
 			throw e;
 		};
-		const s = new FliSource(cfg, { run, breaker: mkBreaker() });
+		const s = new FliSource(cfg, {
+			run,
+			breaker: mkBreaker(),
+			sleep: zeroSleep,
+		});
 		const warn = captureWarn();
 		try {
 			// 全滅時の集約throwはこのテストの関心外(console.warn出力のみ検証する)。
@@ -345,16 +472,107 @@ describe("FliSource.sweep", () => {
 	});
 });
 
+describe("FliSource.sweep 都市→空港展開", () => {
+	test("TYO→BKKは4空港コンボ(NRT/HND×BKK/DMK)に展開され、fli datesは常に空港コードで呼ばれる（Invalid airport codeパスを回避）", async () => {
+		const calls: string[][] = [];
+		const spy = async (args: string[]) => {
+			calls.push(args);
+			return { exitCode: 0, stdout: datesFixture, stderr: "" };
+		};
+		const s = new FliSource(cfg, {
+			run: spy,
+			breaker: mkBreaker(),
+			sleep: zeroSleep,
+		});
+		await s.sweep([{ origin: "TYO", destination: "BKK", market: "jp" }], {
+			from: "2026-08-01",
+			to: "2026-08-07",
+		});
+		expect(calls.length).toBe(4);
+		expect(calls.map((c) => [c[1], c[2]])).toEqual([
+			["NRT", "BKK"],
+			["NRT", "DMK"],
+			["HND", "BKK"],
+			["HND", "DMK"],
+		]);
+		for (const c of calls) {
+			expect(c).not.toContain("TYO");
+			expect(c).not.toContain("BKK-as-city");
+		}
+	});
+
+	test("最大4コンボ/ペアに収まる(TYO×BKKで境界の2×2=4コール)", async () => {
+		let count = 0;
+		const spy = async () => {
+			count++;
+			return { exitCode: 0, stdout: datesFixture, stderr: "" };
+		};
+		const s = new FliSource(cfg, {
+			run: spy,
+			breaker: mkBreaker(),
+			sleep: zeroSleep,
+		});
+		await s.sweep([{ origin: "TYO", destination: "BKK", market: "jp" }], {
+			from: "2026-08-01",
+			to: "2026-08-07",
+		});
+		expect(count).toBe(4);
+	});
+
+	test("同一空港コンボが複数の元ペアから重複して生じた場合、merge時にid重複が1件へdedupeされる", async () => {
+		const s = new FliSource(cfg, {
+			run: datesRun,
+			breaker: mkBreaker(),
+			sleep: zeroSleep,
+		});
+		// jpを2回渡す→NRT-BKK/NRT-DMKの各コンボが完全に重複して問い合わせられるが、
+		// 同一id(同一origin/destination/departDate/price)は1件に統合される。
+		const got = await s.sweep([jp, jp], {
+			from: "2026-08-01",
+			to: "2026-08-07",
+		});
+		expect(got.length).toBe(6); // 単独jpの場合と同じ(2コンボ×3件)。重複分は消える。
+		const ids = got.map((o) => o.id);
+		expect(new Set(ids).size).toBe(ids.length);
+	});
+
+	test("一部コンボが失敗しても他コンボが成功していればthrowしない(部分失敗を許容)", async () => {
+		const run = async (args: string[]) => {
+			if (args[2] === "DMK") {
+				return { exitCode: 1, stdout: "", stderr: "blocked" };
+			}
+			return { exitCode: 0, stdout: datesFixture, stderr: "" };
+		};
+		const s = new FliSource(cfg, {
+			run,
+			breaker: mkBreaker(),
+			sleep: zeroSleep,
+		});
+		const got = await s.sweep([jp], { from: "2026-08-01", to: "2026-08-07" });
+		// DMKコンボは失敗、BKKコンボの3件のみ返る。
+		expect(got.length).toBe(3);
+		expect(got.every((o) => o.destination === "BKK")).toBe(true);
+	});
+});
+
 describe("FliSource.available", () => {
 	test("enabled=falseならavailable=false", () => {
 		const disabled = loadConfig({ env: {} });
 		disabled.fli.enabled = false;
-		const s = new FliSource(disabled, { run: okRun, breaker: mkBreaker() });
+		const s = new FliSource(disabled, {
+			run: okRun,
+			breaker: mkBreaker(),
+			sleep: zeroSleep,
+		});
 		const env = { isCI: false, hasBrowser: false, now: new Date() };
 		expect(s.available(env)).toBe(false);
 	});
 	test("enabled かつ breaker閉ならavailable=true", () => {
-		const s = new FliSource(cfg, { run: okRun, breaker: mkBreaker() });
+		const s = new FliSource(cfg, {
+			run: okRun,
+			breaker: mkBreaker(),
+			sleep: zeroSleep,
+		});
 		const env = { isCI: false, hasBrowser: false, now: new Date() };
 		expect(s.available(env)).toBe(true);
 	});

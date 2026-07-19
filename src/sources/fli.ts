@@ -21,6 +21,67 @@ const SUBPROCESS_TIMEOUT_MS = 30_000;
 // JPY / 日本POS。currency未指定だとUSD既定になるため必ず付与する。
 const LOCALE_ARGS = ["--currency", "JPY", "--country", "JP"];
 
+// ---- 都市コード→空港コード展開 -------------------------------------------------
+// パイプラインはCITY_AIRPORTS/travelpayoutsに合わせて都市コード(TYO/OSA/SEL...)を
+// pairsに渡すが、fli(=Google Flights経由のuvxサブプロセス)は空港コードしか受け付けず、
+// かつ1クエリ1空港(カンマ区切り不可)。都市コードを渡すと
+// `{"success":false,"error":"Invalid airport code: 'TYO'"}` になり、本番watchのfliが
+// 常に観測0件になっていた(本バグの根本原因)。ここでSerpApiSourceのCITY_AIRPORTSと同じ
+// 発想で都市→空港マップを持つが、fliはレート制限があるため候補数はサブプロセス呼び出し
+// 回数を抑える目的で小さく絞る(最大2空港/都市 → 最大2×2=4コンボ/ペア)。
+export const CITY_AIRPORTS: Record<string, string[]> = {
+	TYO: ["NRT", "HND"],
+	OSA: ["KIX"],
+	NGO: ["NGO"],
+	FUK: ["FUK"],
+	OKA: ["OKA"],
+	SEL: ["ICN"],
+	TPE: ["TPE"],
+	KUL: ["KUL"],
+	SGN: ["SGN"],
+	SIN: ["SIN"],
+	HKG: ["HKG"],
+	MNL: ["MNL"],
+	BKK: ["BKK", "DMK"],
+	CNX: ["CNX"],
+	HKT: ["HKT"],
+};
+
+// 都市コード→候補空港配列。マップに無いコード(既に空港コード、または未知)はそのまま
+// 1件配列として素通しする。
+export function airportsOf(code: string): string[] {
+	return CITY_AIRPORTS[code] ?? [code];
+}
+
+// pair(市コードを含み得る)を空港レベルのOdPairの直積に展開する
+// (origin候補×destination候補、marketは元のpairのものを継承)。sweep/verify共通で使う。
+function expandCombos(pair: OdPair): OdPair[] {
+	const out: OdPair[] = [];
+	for (const origin of airportsOf(pair.origin)) {
+		for (const destination of airportsOf(pair.destination)) {
+			out.push({ origin, destination, market: pair.market });
+		}
+	}
+	return out;
+}
+
+// 同一id(内容が実質同一)の観測が複数コンボから重複して返ることがあるためmerge時に除去する
+// (gf-browser/skyscannerの同名ヘルパと同じ発想)。
+function dedupeById<T extends { id: string }>(items: T[]): T[] {
+	const seen = new Set<string>();
+	const out: T[] = [];
+	for (const item of items) {
+		if (seen.has(item.id)) continue;
+		seen.add(item.id);
+		out.push(item);
+	}
+	return out;
+}
+
+// 都市→空港展開後、複数コンボをfli(uvxサブプロセス, レート制限あり)へ連続で叩く際の
+// 短い待機。テストではdeps.sleepにno-opを注入して無効化する(実タイマーで遅くしない)。
+const INTER_CALL_DELAY_MS = 300;
+
 export type RunResult = { exitCode: number; stdout: string; stderr: string };
 export type RunFn = (args: string[]) => Promise<RunResult>;
 export type Breaker = {
@@ -29,7 +90,14 @@ export type Breaker = {
 	recordSuccess(): void;
 };
 
-type FliDeps = { run?: RunFn; breaker?: Breaker; now?: Date };
+type FliDeps = {
+	run?: RunFn;
+	breaker?: Breaker;
+	now?: Date;
+	// コンボ間の待機を注入可能にする(既定はBun.sleep)。テストがグローバルなBun.sleepを
+	// 書き換えずに決定的なノーオップを渡せるようにするため(gf-browser/skyscannerと同じ理由)。
+	sleep?: (ms: number) => Promise<void>;
+};
 
 // `fli flights <origin> <dest> <date> ...` の引数（verify=単日ライブ検索）。
 export function flightsArgs(od: OdPair, date: string): string[] {
@@ -149,6 +217,7 @@ export class FliSource implements FareSource {
 	private readonly run: RunFn;
 	private readonly breaker: Breaker;
 	private readonly now: () => Date;
+	private readonly sleep: (ms: number) => Promise<void>;
 
 	constructor(cfg: Config, deps: FliDeps = {}) {
 		this.cfg = cfg;
@@ -156,6 +225,7 @@ export class FliSource implements FareSource {
 		this.breaker = deps.breaker ?? noopBreaker();
 		const fixedNow = deps.now;
 		this.now = () => fixedNow ?? new Date();
+		this.sleep = deps.sleep ?? Bun.sleep;
 	}
 
 	available(_env: RunnerEnv): boolean {
@@ -163,48 +233,76 @@ export class FliSource implements FareSource {
 	}
 
 	// 単日ライブ検索 → VerifiedOffer[]（sellers=[]、失効時刻なし）。
+	// odは都市コードを含み得るため、expandCombosで空港レベルの直積(最大4コンボ)に展開し、
+	// 各コンボへ`fli flights`を叩いてmerge+dedupeする。1コンボの失敗が他コンボの結果を
+	// 潰さないよう、失敗は個別に握って続行し、全コンボ失敗時のみ集約してthrowする
+	// (sweepと同じ耐性方針)。
 	async verify(od: OdPair, date: string): Promise<VerifiedOffer[]> {
-		try {
-			const res = await this.run(flightsArgs(od, date));
-			if (res.exitCode !== 0) {
-				throw new Error(
-					`fli flights exited ${res.exitCode}: ${res.stderr.trim()}`,
-				);
-			}
-			const offers = this.parseFlights(od, date, res.stdout);
-			this.breaker.recordSuccess();
-			return offers;
-		} catch (err) {
-			this.breaker.recordFailure();
-			throw err;
-		}
-	}
-
-	// 日付範囲の最安スキャン。fliはネイティブの`fli dates`を持つのでそれを使う
-	// （1ペア1コール。詳細leg情報は返らないため、便名/時刻/乗継はverifyで取得する）。
-	async sweep(pairs: OdPair[], range: DateRange): Promise<FareObservation[]> {
-		const out: FareObservation[] = [];
+		const out: VerifiedOffer[] = [];
 		let attempted = 0;
 		let anySucceeded = false;
 		let lastErr: unknown;
-		for (const pair of pairs) {
+		for (const combo of expandCombos(od)) {
+			if (attempted > 0) await this.sleep(INTER_CALL_DELAY_MS);
 			attempted++;
 			try {
-				const res = await this.run(datesArgs(pair, range));
+				const res = await this.run(flightsArgs(combo, date));
 				if (res.exitCode !== 0) {
 					throw new Error(
-						`fli dates exited ${res.exitCode}: ${res.stderr.trim()}`,
+						`fli flights exited ${res.exitCode}: ${res.stderr.trim()}`,
 					);
 				}
-				for (const obs of this.parseDates(pair, res.stdout)) out.push(obs);
+				for (const offer of this.parseFlights(combo, date, res.stdout))
+					out.push(offer);
 				anySucceeded = true;
 			} catch (err) {
 				lastErr = err;
 				// 生Errorオブジェクトを渡さない —enumerableプロパティをconsoleが展開して
 				// 漏らす経路を構造的に断つため、必ず文字列化してから渡す(http.ts参照)。
 				console.warn(
-					`fli: sweep failed for ${pair.origin}->${pair.destination}: ${safeErrorMessage(err)}`,
+					`fli: verify failed for ${combo.origin}->${combo.destination}: ${safeErrorMessage(err)}`,
 				);
+			}
+		}
+		if (attempted > 0 && !anySucceeded) {
+			this.breaker.recordFailure();
+			throw new Error(`fli: all verify requests failed: ${String(lastErr)}`);
+		}
+		if (anySucceeded) this.breaker.recordSuccess();
+		return dedupeById(out);
+	}
+
+	// 日付範囲の最安スキャン。fliはネイティブの`fli dates`を持つのでそれを使う
+	// （詳細leg情報は返らないため、便名/時刻/乗継はverifyで取得する）。
+	// 各pairは都市コードを含み得るため、expandCombosで空港レベルの直積(最大4コンボ/pair)に
+	// 展開してから個別に`fli dates`を叩き、結果をmerge+dedupeする。1コンボが失敗しても
+	// 他コンボ/他pairの結果は活かし、全pair全コンボが失敗した場合のみthrowする。
+	async sweep(pairs: OdPair[], range: DateRange): Promise<FareObservation[]> {
+		const out: FareObservation[] = [];
+		let attempted = 0;
+		let anySucceeded = false;
+		let lastErr: unknown;
+		for (const pair of pairs) {
+			for (const combo of expandCombos(pair)) {
+				if (attempted > 0) await this.sleep(INTER_CALL_DELAY_MS);
+				attempted++;
+				try {
+					const res = await this.run(datesArgs(combo, range));
+					if (res.exitCode !== 0) {
+						throw new Error(
+							`fli dates exited ${res.exitCode}: ${res.stderr.trim()}`,
+						);
+					}
+					for (const obs of this.parseDates(combo, res.stdout)) out.push(obs);
+					anySucceeded = true;
+				} catch (err) {
+					lastErr = err;
+					// 生Errorオブジェクトを渡さない —enumerableプロパティをconsoleが展開して
+					// 漏らす経路を構造的に断つため、必ず文字列化してから渡す(http.ts参照)。
+					console.warn(
+						`fli: sweep failed for ${combo.origin}->${combo.destination}: ${safeErrorMessage(err)}`,
+					);
+				}
 			}
 		}
 		if (attempted > 0 && !anySucceeded) {
@@ -212,7 +310,7 @@ export class FliSource implements FareSource {
 			throw new Error(`fli: all sweep requests failed: ${String(lastErr)}`);
 		}
 		if (anySucceeded) this.breaker.recordSuccess();
-		return out;
+		return dedupeById(out);
 	}
 
 	private parseFlights(
