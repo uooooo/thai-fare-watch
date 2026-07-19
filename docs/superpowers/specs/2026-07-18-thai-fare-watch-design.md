@@ -149,8 +149,8 @@ interface FareSource {
 
 販売元情報（GFブラウザの予約オプションパネル、またはSerpAPI Booking Options）を分類:
 
-- 航空会社直販（GF: 販売元名が運航会社名と一致 / SerpAPI: `airline === true`）→ **trusted**。ZIPAIR/AirAsia等のLCC直販もここで拾える。
-- OTA名の正規化名が `trusted_otas` に部分一致 → **trusted（信頼OTA）**。
+- 航空会社直販（GF: 正規化後の販売元名が運航会社名と**完全一致** / SerpAPI: `airline === true`）→ **trusted**。ZIPAIR/AirAsia等のLCC直販もここで拾える。正規化は NFKC→小文字→「で予約」等の接尾辞除去→英数字以外除去。
+- OTA名の正規化名が `trusted_otas` エントリと**完全一致** → **trusted（信頼OTA）**。部分一致・前方一致は不採用（Mytrip.com⊃trip.com、trip.com.evil等のなりすまし経路を遮断。偽陽性は致命的・偽陰性は安全側）。CJK併記（「Trip.com（トリップ）」）は正規化で消えるため一致する。ラテン文字の表記ゆれ（"Trip.com (Japan)"等）が実在した場合は `trusted_otas` に明示追加して対応する。
 - それ以外 → **reference（参考）**。通知対象外、ダッシュボードにのみ表示。
 
 通知には trusted 販売元の最安値と予約先名・リンク（Google Flightsリンク+販売元名。直リンクが単純GETで得られる場合のみ直リンク併記）を載せる。
