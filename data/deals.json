@@ -1,0 +1,486 @@
+[
+  {
+    "id": "7b8e74cf7d6e",
+    "kind": "direct",
+    "legs": [
+      {
+        "id": "0a3240058fbd",
+        "source": "fli",
+        "origin": "NRT",
+        "destination": "DMK",
+        "departDate": "2026-08-18",
+        "transfers": 0,
+        "priceJpy": 26687,
+        "market": "jp",
+        "foundAt": "2026-07-19T13:40:59.781Z"
+      }
+    ],
+    "totalJpy": 26687,
+    "fxFeeJpy": 0,
+    "risks": [],
+    "verification": "unverified"
+  },
+  {
+    "id": "e34557826821",
+    "kind": "direct",
+    "legs": [
+      {
+        "id": "c1bd603867d9",
+        "source": "fli",
+        "origin": "NRT",
+        "destination": "DMK",
+        "departDate": "2026-08-19",
+        "transfers": 0,
+        "priceJpy": 26687,
+        "market": "jp",
+        "foundAt": "2026-07-19T13:40:59.781Z"
+      }
+    ],
+    "totalJpy": 26687,
+    "fxFeeJpy": 0,
+    "risks": [],
+    "verification": "unverified"
+  },
+  {
+    "id": "a03f8ba0452d",
+    "kind": "positioned",
+    "legs": [
+      {
+        "kind": "ground",
+        "mode": "bus",
+        "from": "TYO",
+        "to": "OSA",
+        "priceJpy": 6000,
+        "hours": 9
+      },
+      {
+        "id": "d6409a8fbfdc",
+        "source": "fli",
+        "origin": "KIX",
+        "destination": "BKK",
+        "departDate": "2026-08-14",
+        "transfers": 0,
+        "priceJpy": 22440,
+        "market": "jp",
+        "foundAt": "2026-07-19T13:41:05.023Z"
+      }
+    ],
+    "totalJpy": 28440,
+    "fxFeeJpy": 0,
+    "risks": [],
+    "verification": "unverified"
+  },
+  {
+    "id": "ae1d5aabee48",
+    "kind": "positioned",
+    "legs": [
+      {
+        "kind": "ground",
+        "mode": "bus",
+        "from": "TYO",
+        "to": "OSA",
+        "priceJpy": 6000,
+        "hours": 9
+      },
+      {
+        "id": "f0bc158fcdb0",
+        "source": "fli",
+        "origin": "KIX",
+        "destination": "BKK",
+        "departDate": "2026-08-16",
+        "transfers": 0,
+        "priceJpy": 22440,
+        "market": "jp",
+        "foundAt": "2026-07-19T13:41:05.023Z"
+      }
+    ],
+    "totalJpy": 28440,
+    "fxFeeJpy": 0,
+    "risks": [],
+    "verification": "unverified"
+  },
+  {
+    "id": "e4e784a7bafa",
+    "kind": "direct",
+    "legs": [
+      {
+        "id": "876594300f6d",
+        "source": "fli",
+        "origin": "NRT",
+        "destination": "DMK",
+        "departDate": "2026-07-24",
+        "transfers": 0,
+        "priceJpy": 30470,
+        "market": "jp",
+        "foundAt": "2026-07-19T13:40:59.781Z"
+      }
+    ],
+    "totalJpy": 30470,
+    "fxFeeJpy": 0,
+    "risks": [],
+    "verification": "unverified"
+  },
+  {
+    "id": "dca87a5fa9a2",
+    "kind": "positioned",
+    "legs": [
+      {
+        "kind": "ground",
+        "mode": "bus",
+        "from": "TYO",
+        "to": "OSA",
+        "priceJpy": 6000,
+        "hours": 9
+      },
+      {
+        "id": "43be62d75cbe",
+        "source": "fli",
+        "origin": "KIX",
+        "destination": "BKK",
+        "departDate": "2026-08-13",
+        "transfers": 0,
+        "priceJpy": 24940,
+        "market": "jp",
+        "foundAt": "2026-07-19T13:41:05.023Z"
+      }
+    ],
+    "totalJpy": 30940,
+    "fxFeeJpy": 0,
+    "risks": [],
+    "verification": "unverified"
+  },
+  {
+    "id": "f4e693d7428d",
+    "kind": "direct",
+    "legs": [
+      {
+        "id": "815d556b7fec",
+        "source": "fli",
+        "origin": "NRT",
+        "destination": "DMK",
+        "departDate": "2026-07-21",
+        "transfers": 0,
+        "priceJpy": 31392,
+        "market": "jp",
+        "foundAt": "2026-07-19T13:40:59.781Z"
+      }
+    ],
+    "totalJpy": 31392,
+    "fxFeeJpy": 0,
+    "risks": [],
+    "verification": "unverified"
+  },
+  {
+    "id": "da304b7964fe",
+    "kind": "direct",
+    "legs": [
+      {
+        "id": "75eb0032b5a5",
+        "source": "fli",
+        "origin": "NRT",
+        "destination": "DMK",
+        "departDate": "2026-07-23",
+        "transfers": 0,
+        "priceJpy": 31392,
+        "market": "jp",
+        "foundAt": "2026-07-19T13:40:59.781Z"
+      }
+    ],
+    "totalJpy": 31392,
+    "fxFeeJpy": 0,
+    "risks": [],
+    "verification": "unverified"
+  },
+  {
+    "id": "a7350f103b55",
+    "kind": "direct",
+    "legs": [
+      {
+        "id": "081f3b627852",
+        "source": "fli",
+        "origin": "NRT",
+        "destination": "DMK",
+        "departDate": "2026-07-25",
+        "transfers": 0,
+        "priceJpy": 31392,
+        "market": "jp",
+        "foundAt": "2026-07-19T13:40:59.781Z"
+      }
+    ],
+    "totalJpy": 31392,
+    "fxFeeJpy": 0,
+    "risks": [],
+    "verification": "unverified"
+  },
+  {
+    "id": "a3caff02f65d",
+    "kind": "direct",
+    "legs": [
+      {
+        "id": "aa564fe3a558",
+        "source": "fli",
+        "origin": "NRT",
+        "destination": "DMK",
+        "departDate": "2026-08-14",
+        "transfers": 0,
+        "priceJpy": 31392,
+        "market": "jp",
+        "foundAt": "2026-07-19T13:40:59.781Z"
+      }
+    ],
+    "totalJpy": 31392,
+    "fxFeeJpy": 0,
+    "risks": [],
+    "verification": "unverified"
+  },
+  {
+    "id": "c11941e28ef8",
+    "kind": "direct",
+    "legs": [
+      {
+        "id": "1de0fd69504b",
+        "source": "fli",
+        "origin": "NRT",
+        "destination": "DMK",
+        "departDate": "2026-08-15",
+        "transfers": 0,
+        "priceJpy": 31392,
+        "market": "jp",
+        "foundAt": "2026-07-19T13:40:59.781Z"
+      }
+    ],
+    "totalJpy": 31392,
+    "fxFeeJpy": 0,
+    "risks": [],
+    "verification": "unverified"
+  },
+  {
+    "id": "b14fffcf1d83",
+    "kind": "direct",
+    "legs": [
+      {
+        "id": "e872143b53af",
+        "source": "fli",
+        "origin": "NRT",
+        "destination": "DMK",
+        "departDate": "2026-08-16",
+        "transfers": 0,
+        "priceJpy": 31392,
+        "market": "jp",
+        "foundAt": "2026-07-19T13:40:59.781Z"
+      }
+    ],
+    "totalJpy": 31392,
+    "fxFeeJpy": 0,
+    "risks": [],
+    "verification": "unverified"
+  },
+  {
+    "id": "456f3fa261af",
+    "kind": "direct",
+    "legs": [
+      {
+        "id": "b501a04c6637",
+        "source": "fli",
+        "origin": "NRT",
+        "destination": "DMK",
+        "departDate": "2026-08-17",
+        "transfers": 0,
+        "priceJpy": 31392,
+        "market": "jp",
+        "foundAt": "2026-07-19T13:40:59.781Z"
+      }
+    ],
+    "totalJpy": 31392,
+    "fxFeeJpy": 0,
+    "risks": [],
+    "verification": "unverified"
+  },
+  {
+    "id": "36f29f5558a2",
+    "kind": "direct",
+    "legs": [
+      {
+        "id": "5e30285216d3",
+        "source": "fli",
+        "origin": "NRT",
+        "destination": "DMK",
+        "departDate": "2026-07-22",
+        "transfers": 0,
+        "priceJpy": 32470,
+        "market": "jp",
+        "foundAt": "2026-07-19T13:40:59.781Z"
+      }
+    ],
+    "totalJpy": 32470,
+    "fxFeeJpy": 0,
+    "risks": [],
+    "verification": "unverified"
+  },
+  {
+    "id": "873d0c217ee8",
+    "kind": "direct",
+    "legs": [
+      {
+        "id": "a72a270c26be",
+        "source": "fli",
+        "origin": "NRT",
+        "destination": "DMK",
+        "departDate": "2026-07-27",
+        "transfers": 0,
+        "priceJpy": 32470,
+        "market": "jp",
+        "foundAt": "2026-07-19T13:40:59.781Z"
+      }
+    ],
+    "totalJpy": 32470,
+    "fxFeeJpy": 0,
+    "risks": [],
+    "verification": "unverified"
+  },
+  {
+    "id": "a52b5b75be0a",
+    "kind": "positioned",
+    "legs": [
+      {
+        "kind": "ground",
+        "mode": "bus",
+        "from": "TYO",
+        "to": "OSA",
+        "priceJpy": 6000,
+        "hours": 9
+      },
+      {
+        "id": "7fb285d96b86",
+        "source": "fli",
+        "origin": "KIX",
+        "destination": "BKK",
+        "departDate": "2026-07-21",
+        "transfers": 0,
+        "priceJpy": 27393,
+        "market": "jp",
+        "foundAt": "2026-07-19T13:41:05.023Z"
+      }
+    ],
+    "totalJpy": 33393,
+    "fxFeeJpy": 0,
+    "risks": [],
+    "verification": "unverified"
+  },
+  {
+    "id": "070ef0ed0130",
+    "kind": "positioned",
+    "legs": [
+      {
+        "kind": "ground",
+        "mode": "bus",
+        "from": "TYO",
+        "to": "OSA",
+        "priceJpy": 6000,
+        "hours": 9
+      },
+      {
+        "id": "452a078f83d6",
+        "source": "fli",
+        "origin": "KIX",
+        "destination": "BKK",
+        "departDate": "2026-07-23",
+        "transfers": 0,
+        "priceJpy": 27393,
+        "market": "jp",
+        "foundAt": "2026-07-19T13:41:05.023Z"
+      }
+    ],
+    "totalJpy": 33393,
+    "fxFeeJpy": 0,
+    "risks": [],
+    "verification": "unverified"
+  },
+  {
+    "id": "dfcd7d9af48f",
+    "kind": "positioned",
+    "legs": [
+      {
+        "kind": "ground",
+        "mode": "bus",
+        "from": "TYO",
+        "to": "OSA",
+        "priceJpy": 6000,
+        "hours": 9
+      },
+      {
+        "id": "81efcdcfde63",
+        "source": "fli",
+        "origin": "KIX",
+        "destination": "BKK",
+        "departDate": "2026-07-25",
+        "transfers": 0,
+        "priceJpy": 27393,
+        "market": "jp",
+        "foundAt": "2026-07-19T13:41:05.023Z"
+      }
+    ],
+    "totalJpy": 33393,
+    "fxFeeJpy": 0,
+    "risks": [],
+    "verification": "unverified"
+  },
+  {
+    "id": "7e3932bf93ac",
+    "kind": "positioned",
+    "legs": [
+      {
+        "kind": "ground",
+        "mode": "bus",
+        "from": "TYO",
+        "to": "OSA",
+        "priceJpy": 6000,
+        "hours": 9
+      },
+      {
+        "id": "ddad80e92f35",
+        "source": "fli",
+        "origin": "KIX",
+        "destination": "BKK",
+        "departDate": "2026-07-26",
+        "transfers": 0,
+        "priceJpy": 27393,
+        "market": "jp",
+        "foundAt": "2026-07-19T13:41:05.023Z"
+      }
+    ],
+    "totalJpy": 33393,
+    "fxFeeJpy": 0,
+    "risks": [],
+    "verification": "unverified"
+  },
+  {
+    "id": "608db6400c8f",
+    "kind": "positioned",
+    "legs": [
+      {
+        "kind": "ground",
+        "mode": "bus",
+        "from": "TYO",
+        "to": "OSA",
+        "priceJpy": 6000,
+        "hours": 9
+      },
+      {
+        "id": "ec139b3fdf80",
+        "source": "fli",
+        "origin": "KIX",
+        "destination": "BKK",
+        "departDate": "2026-08-15",
+        "transfers": 0,
+        "priceJpy": 27393,
+        "market": "jp",
+        "foundAt": "2026-07-19T13:41:05.023Z"
+      }
+    ],
+    "totalJpy": 33393,
+    "fxFeeJpy": 0,
+    "risks": [],
+    "verification": "unverified"
+  }
+]
