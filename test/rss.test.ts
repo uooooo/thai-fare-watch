@@ -50,6 +50,23 @@ describe("matchSaleNews", () => {
 			"バンコク",
 		);
 	});
+	test("航空会社+タイムセールのみ（国内文脈）はrule Bでもマッチしない", () => {
+		expect(
+			matchSaleNews("ピーチ、春の国内線タイムセール", cfg.rss_keywords),
+		).toEqual([]);
+		expect(
+			matchSaleNews("ジェットスター、48時間タイムセール", cfg.rss_keywords),
+		).toEqual([]);
+	});
+	test("航空会社+国際線/アジアはrule Bでマッチする", () => {
+		expect(
+			matchSaleNews("エアアジア、国際線で大規模セール", cfg.rss_keywords)
+				.length,
+		).toBeGreaterThan(0);
+		expect(
+			matchSaleNews("スクート、アジア路線セール", cfg.rss_keywords).length,
+		).toBeGreaterThan(0);
+	});
 });
 
 describe("RssSignal.poll", () => {

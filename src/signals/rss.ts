@@ -20,14 +20,16 @@ type RssFeedXml = {
 	rss?: { channel?: { item?: RssItemXml | RssItemXml[] } };
 };
 
-// Rule B（airlines × context）の文脈語からは「セール」「片道」を除外する。
+// Rule B（airlines × context）の文脈語からは「セール」「片道」「タイムセール」を除外する。
 // 理由: 「セール」は国内線の特売でも高頻度に出る語で、航空会社名との併存だけでは
-// 国際線シグナルとして弱すぎる（「タイムセール」のような複合語は末尾に「セール」を
-// 含むが、独立した語として除外リストとは別に候補へ残る＝文字列除外ではなく
-// 候補リストからの単語除外で実現する）。「片道」も国内線セールで広く使われ弁別力が
-// 低いため同様に除外する。config自体（rss_keywords.context）は変更せず、
-// フィルタはこのmatcher内でのみ行う。
-const RULE_B_EXCLUDED_CONTEXT = new Set(["セール", "片道"]);
+// 国際線シグナルとして弱すぎる。「片道」も国内線セールで広く使われ弁別力が低いため
+// 同様に除外する。「タイムセール」はピーチ/ジェットスターのような国内線LCCが
+// 毎週のように使う定型文言で、航空会社名との併存だけでは国内線タイムセールを
+// 繰り返し誤検知するため除外する（国際線セールは地名一致=Rule Aか、「アジア」
+// 「国際線」を伴うことが大半）。除外後のRule B文脈語は実質「アジア」「国際線」の
+// 2語のみになる。これは候補リストからの単語除外であり、config自体
+// （rss_keywords.context）は変更せず、フィルタはこのmatcher内でのみ行う。
+const RULE_B_EXCLUDED_CONTEXT = new Set(["セール", "片道", "タイムセール"]);
 
 // カタカナ連続文字（ァ-ヺ及び長音符ー）。「・」(U+30FB)は区切り文字として境界扱い
 // （＝連続とはみなさない）にするため、この判定範囲に含めない。
@@ -74,7 +76,7 @@ function includesAny(title: string, words: string[]): string[] {
 // マッチしたキーワードを返す（空配列=不一致）。
 // Rule A: placesのいずれかを含む → その語（複数可）を返す。
 // Rule B: Rule Aが不一致の場合のみ判定。airlinesのいずれか かつ
-//         （セール/片道を除いた）contextのいずれかを含む → 両方の語を返す。
+//         （セール/片道/タイムセールを除いた）contextのいずれかを含む → 両方の語を返す。
 export function matchSaleNews(
 	title: string,
 	kw: Config["rss_keywords"],
