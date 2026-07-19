@@ -102,21 +102,33 @@ describe("makeCiBreaker on a dryRun store (C1)", () => {
 });
 
 describe("buildSources", () => {
-	test("opts省略時は従来どおり3ソース(fli/travelpayouts/serpapi)を返す", () => {
+	// Task 15: gf-browser(Playwright)が追加され、opts省略時/dryRun時ともに4ソースを返す。
+	// available(env)による絞り込みはbuildSources自身の責務ではなく呼び出し側(pipeline/cli)が
+	// 行うため、isCI=trueのenvCI下でもgf-browserは(available=falseになるだけで)配列には含まれる。
+	test("opts省略時は4ソース(fli/gf-browser/serpapi/travelpayouts)を返す", () => {
 		const dir = mkdtempSync(join(tmpdir(), "tfw-"));
 		const store = new Store(dir);
 		const sources = buildSources(cfg, store, envCI);
 		expect(sources.map((s) => s.name).sort()).toEqual(
-			["fli", "serpapi", "travelpayouts"].sort(),
+			["fli", "gf-browser", "serpapi", "travelpayouts"].sort(),
 		);
 	});
 
-	test("dryRun:trueでも同じ3ソースを返す(内部storeがdryRunラップされるだけ)", () => {
+	test("dryRun:trueでも同じ4ソースを返す(内部storeがdryRunラップされるだけ)", () => {
 		const dir = mkdtempSync(join(tmpdir(), "tfw-"));
 		const store = new Store(dir);
 		const sources = buildSources(cfg, store, envCI, { dryRun: true });
 		expect(sources.map((s) => s.name).sort()).toEqual(
-			["fli", "serpapi", "travelpayouts"].sort(),
+			["fli", "gf-browser", "serpapi", "travelpayouts"].sort(),
 		);
+	});
+
+	test("gf-browserはisCI=trueのenvCI下ではavailable=false(配列には含まれる)", () => {
+		const dir = mkdtempSync(join(tmpdir(), "tfw-"));
+		const store = new Store(dir);
+		const sources = buildSources(cfg, store, envCI);
+		const gfBrowser = sources.find((s) => s.name === "gf-browser");
+		expect(gfBrowser).toBeDefined();
+		expect(gfBrowser?.available(envCI)).toBe(false);
 	});
 });

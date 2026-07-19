@@ -2,6 +2,7 @@ import type { Config } from "../config";
 import type { Store } from "../state/store";
 import { makeDryRunStore } from "../state/store";
 import { FliSource, makeCiBreaker } from "./fli";
+import { GfBrowserSource } from "./gf-browser/index";
 import { SerpApiSource } from "./serpapi";
 import { TravelpayoutsSource } from "./travelpayouts";
 import type { FareSource, RunnerEnv } from "./types";
@@ -24,7 +25,10 @@ export function buildSources(
 ): FareSource[] {
 	const effectiveStore = opts?.dryRun ? makeDryRunStore(store) : store;
 	return [
-		// gf-browser(Playwright+Chrome, ローカル専用の主砲)はTask 15でここに追加する。
+		// gf-browser(Playwright+Chrome, ローカル専用の主砲)。常に構築するが、CI/ブラウザ無し
+		// 環境ではavailable(env)がfalseを返すため、呼び出し側(pipeline/cli)のavailable(env)
+		// ガードにより実際には起動されない。
+		new GfBrowserSource(cfg, { now: env.now }),
 		new FliSource(cfg, { breaker: makeCiBreaker(effectiveStore, cfg, env) }),
 		new TravelpayoutsSource(cfg),
 		new SerpApiSource(cfg, { store: effectiveStore, now: env.now }),
