@@ -12,7 +12,7 @@
         "transfers": 0,
         "priceJpy": 26687,
         "market": "jp",
-        "foundAt": "2026-07-23T00:12:07.483Z"
+        "foundAt": "2026-07-23T03:59:01.337Z"
       }
     ],
     "totalJpy": 26687,
@@ -33,7 +33,7 @@
         "transfers": 0,
         "priceJpy": 26687,
         "market": "jp",
-        "foundAt": "2026-07-23T00:12:07.483Z"
+        "foundAt": "2026-07-23T03:59:01.337Z"
       }
     ],
     "totalJpy": 26687,
@@ -54,7 +54,7 @@
         "transfers": 0,
         "priceJpy": 26687,
         "market": "jp",
-        "foundAt": "2026-07-23T00:12:07.483Z"
+        "foundAt": "2026-07-23T03:59:01.337Z"
       }
     ],
     "totalJpy": 26687,
@@ -75,7 +75,7 @@
         "transfers": 0,
         "priceJpy": 26687,
         "market": "jp",
-        "foundAt": "2026-07-23T00:12:07.483Z"
+        "foundAt": "2026-07-23T03:59:01.337Z"
       }
     ],
     "totalJpy": 26687,
@@ -96,7 +96,7 @@
         "transfers": 0,
         "priceJpy": 26687,
         "market": "jp",
-        "foundAt": "2026-07-23T00:12:07.483Z"
+        "foundAt": "2026-07-23T03:59:01.337Z"
       }
     ],
     "totalJpy": 26687,
@@ -117,7 +117,7 @@
         "transfers": 0,
         "priceJpy": 26687,
         "market": "jp",
-        "foundAt": "2026-07-23T00:12:07.483Z"
+        "foundAt": "2026-07-23T03:59:01.337Z"
       }
     ],
     "totalJpy": 26687,
@@ -138,7 +138,7 @@
         "transfers": 0,
         "priceJpy": 26687,
         "market": "jp",
-        "foundAt": "2026-07-23T00:12:07.483Z"
+        "foundAt": "2026-07-23T03:59:01.337Z"
       }
     ],
     "totalJpy": 26687,
@@ -188,7 +188,7 @@
         "transfers": 0,
         "priceJpy": 29831,
         "market": "jp",
-        "foundAt": "2026-07-23T00:12:11.794Z"
+        "foundAt": "2026-07-23T03:59:05.835Z"
       }
     ],
     "totalJpy": 29831,
@@ -217,7 +217,7 @@
         "transfers": 0,
         "priceJpy": 24250,
         "market": "jp",
-        "foundAt": "2026-07-23T00:12:14.383Z"
+        "foundAt": "2026-07-23T03:59:08.557Z"
       }
     ],
     "totalJpy": 30250,
@@ -246,7 +246,7 @@
         "transfers": 0,
         "priceJpy": 24250,
         "market": "jp",
-        "foundAt": "2026-07-23T00:12:14.383Z"
+        "foundAt": "2026-07-23T03:59:08.557Z"
       }
     ],
     "totalJpy": 30250,
@@ -275,7 +275,7 @@
         "transfers": 0,
         "priceJpy": 24250,
         "market": "jp",
-        "foundAt": "2026-07-23T00:12:14.383Z"
+        "foundAt": "2026-07-23T03:59:08.557Z"
       }
     ],
     "totalJpy": 30250,
@@ -304,7 +304,7 @@
         "transfers": 0,
         "priceJpy": 24250,
         "market": "jp",
-        "foundAt": "2026-07-21T12:00:10.904Z"
+        "foundAt": "2026-07-23T03:59:08.557Z"
       }
     ],
     "totalJpy": 30250,
@@ -325,7 +325,7 @@
         "transfers": 0,
         "priceJpy": 7830,
         "market": "jp",
-        "foundAt": "2026-07-23T00:13:28.394Z"
+        "foundAt": "2026-07-23T04:00:25.135Z"
       },
       {
         "id": "d6409a8fbfdc",
@@ -360,10 +360,73 @@
         "transfers": 0,
         "priceJpy": 30470,
         "market": "jp",
-        "foundAt": "2026-07-23T00:10:37.583Z"
+        "foundAt": "2026-07-23T03:57:28.838Z"
       }
     ],
     "totalJpy": 30470,
+    "fxFeeJpy": 0,
+    "risks": [],
+    "verification": "unverified"
+  },
+  {
+    "id": "e27ae79e52c3",
+    "kind": "direct",
+    "legs": [
+      {
+        "id": "4d14a0902bff",
+        "source": "fli",
+        "origin": "NRT",
+        "destination": "BKK",
+        "departDate": "2026-08-16",
+        "transfers": 0,
+        "priceJpy": 30870,
+        "market": "jp",
+        "foundAt": "2026-07-23T03:59:00.442Z"
+      }
+    ],
+    "totalJpy": 30870,
+    "fxFeeJpy": 0,
+    "risks": [],
+    "verification": "unverified"
+  },
+  {
+    "id": "c9f5ada8819a",
+    "kind": "direct",
+    "legs": [
+      {
+        "id": "1c53b358d7e9",
+        "source": "fli",
+        "origin": "NRT",
+        "destination": "BKK",
+        "departDate": "2026-08-22",
+        "transfers": 0,
+        "priceJpy": 30870,
+        "market": "jp",
+        "foundAt": "2026-07-23T03:59:00.442Z"
+      }
+    ],
+    "totalJpy": 30870,
+    "fxFeeJpy": 0,
+    "risks": [],
+    "verification": "unverified"
+  },
+  {
+    "id": "93e9e565f762",
+    "kind": "direct",
+    "legs": [
+      {
+        "id": "9c22be52c10c",
+        "source": "fli",
+        "origin": "NRT",
+        "destination": "BKK",
+        "departDate": "2026-08-23",
+        "transfers": 0,
+        "priceJpy": 30870,
+        "market": "jp",
+        "foundAt": "2026-07-23T03:59:00.442Z"
+      }
+    ],
+    "totalJpy": 30870,
     "fxFeeJpy": 0,
     "risks": [],
     "verification": "unverified"
@@ -389,105 +452,12 @@
         "transfers": 0,
         "priceJpy": 24940,
         "market": "jp",
-        "foundAt": "2026-07-23T00:12:13.539Z"
+        "foundAt": "2026-07-23T03:59:07.681Z"
       }
     ],
     "totalJpy": 30940,
     "fxFeeJpy": 0,
     "risks": [],
-    "verification": "unverified"
-  },
-  {
-    "id": "cc88c8620c23",
-    "kind": "positioned",
-    "legs": [
-      {
-        "kind": "ground",
-        "mode": "bus",
-        "from": "TYO",
-        "to": "OSA",
-        "priceJpy": 6000,
-        "hours": 9
-      },
-      {
-        "id": "b1d4f4ae44d1",
-        "source": "fli",
-        "origin": "KIX",
-        "destination": "BKK",
-        "departDate": "2026-08-14",
-        "transfers": 0,
-        "priceJpy": 24940,
-        "market": "jp",
-        "foundAt": "2026-07-23T00:12:13.539Z"
-      }
-    ],
-    "totalJpy": 30940,
-    "fxFeeJpy": 0,
-    "risks": [],
-    "verification": "unverified"
-  },
-  {
-    "id": "bad33303654a",
-    "kind": "positioned",
-    "legs": [
-      {
-        "kind": "ground",
-        "mode": "bus",
-        "from": "TYO",
-        "to": "OSA",
-        "priceJpy": 6000,
-        "hours": 9
-      },
-      {
-        "id": "07f30e020f96",
-        "source": "fli",
-        "origin": "KIX",
-        "destination": "BKK",
-        "departDate": "2026-08-16",
-        "transfers": 0,
-        "priceJpy": 24940,
-        "market": "jp",
-        "foundAt": "2026-07-23T00:12:13.539Z"
-      }
-    ],
-    "totalJpy": 30940,
-    "fxFeeJpy": 0,
-    "risks": [],
-    "verification": "unverified"
-  },
-  {
-    "id": "a7999e5ecb1e",
-    "kind": "self_transfer",
-    "legs": [
-      {
-        "id": "8c961d0232d3",
-        "source": "fli",
-        "origin": "NRT",
-        "destination": "TPE",
-        "departDate": "2026-08-18",
-        "transfers": 0,
-        "priceJpy": 18910,
-        "market": "jp",
-        "foundAt": "2026-07-23T00:12:29.196Z"
-      },
-      {
-        "id": "31da7ee97e18",
-        "source": "fli",
-        "origin": "TPE",
-        "destination": "DMK",
-        "departDate": "2026-08-18",
-        "transfers": 0,
-        "priceJpy": 12073,
-        "market": "tw",
-        "foundAt": "2026-07-22T17:41:22.937Z"
-      }
-    ],
-    "totalJpy": 31249,
-    "fxFeeJpy": 266,
-    "risks": [
-      "自己乗継(別切り)",
-      "時刻要確認"
-    ],
     "verification": "unverified"
   }
 ]
