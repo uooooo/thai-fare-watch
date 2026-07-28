@@ -1,9 +1,9 @@
 {
   "lastRuns": {
-    "rss:traicy-sale": "2026-07-27T23:16:20.322Z",
-    "rss:sky-budget": "2026-07-27T21:43:54.023Z",
-    "window:immediate": "2026-07-27T23:16:20.322Z",
-    "window:near": "2026-07-27T23:16:20.322Z"
+    "rss:traicy-sale": "2026-07-28T04:20:35.391Z",
+    "rss:sky-budget": "2026-07-28T04:20:35.391Z",
+    "window:immediate": "2026-07-28T04:20:35.391Z",
+    "window:near": "2026-07-28T04:20:35.391Z"
   },
   "rssSeen": {
     "traicy-sale": [
@@ -12,6 +12,7 @@
       "https://www.traicy.com/?p=375034"
     ],
     "sky-budget": [
+      "https://sky-budget.com/?p=105275",
       "https://sky-budget.com/?p=104913"
     ]
   },
